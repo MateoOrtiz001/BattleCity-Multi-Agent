@@ -3,6 +3,11 @@ import time
 import os
 import traceback
 import sys
+import copy
+from .bullet import Bullet
+from .tank import Tank
+from .walls import Wall
+from .base import Base
 
 class BattleCityGame:
     def __init__(self):
@@ -93,8 +98,108 @@ class BattleCityGame:
         return actions
         
     def generateSuccessor(self, tankIndex, action):
-        # Generar el estado sucesor después de que un tanque tome una acción
-        pass
+        """
+        Genera un nuevo estado del juego tras aplicar la acción del tanque dado.
+        Avanza un paso de simulación (acciones + movimiento de balas).
+        """
+        # Clonar el estado actual del juego
+        next_game = copy.deepcopy(self)
+
+        # Identificar tanque
+        all_tanks = next_game.teamA_tanks + next_game.teamB_tanks
+        tank = all_tanks[tankIndex]
+        if not tank.is_alive:
+            return next_game  # tanque muerto => no hace nada
+
+        # Movimiento por dirección
+        DIR_DELTA = {
+            'UP': (0, 1),
+            'DOWN': (0, -1),
+            'LEFT': (-1, 0),
+            'RIGHT': (1, 0)
+        }
+
+        # Acción: mover
+        if action.startswith('MOVE'):
+            direction = action.split('_')[1]
+            tank.direction = direction
+            dx, dy = DIR_DELTA[direction]
+            new_pos = (tank.position[0] + dx, tank.position[1] + dy)
+
+            # Verificar colisiones (muros, bordes, otros tanques, bases)
+            if (0 <= new_pos[0] < 24 and 0 <= new_pos[1] < 24):
+                # Muros
+                blocked = False
+                for wall in next_game.walls:
+                    if wall.position == new_pos and not wall.is_destroyed:
+                        blocked = True
+                        break
+                # Bases
+                if next_game.baseA.position == new_pos or next_game.baseB.position == new_pos:
+                    blocked = True
+                # Tanques
+                for t in all_tanks:
+                    if t != tank and t.is_alive and t.position == new_pos:
+                        blocked = True
+                        break
+                if not blocked:
+                    tank.move(new_pos)
+
+        elif action == 'FIRE':
+            # Crear bala frente al tanque
+            if tank.direction is not None:
+                dx, dy = DIR_DELTA[tank.direction]
+                bullet_pos = (tank.position[0] + dx, tank.position[1] + dy)
+                if 0 <= bullet_pos[0] < 24 and 0 <= bullet_pos[1] < 24:
+                    next_game.bullets.append(
+                        Bullet(bullet_pos, tank.direction, tank.team, owner_id=tankIndex)
+                    )
+
+        # --- Mover balas ---
+        active_bullets = []
+        for bullet in next_game.bullets:
+            if not bullet.is_active:
+                continue
+            bullet.move()
+            x, y = bullet.position
+
+            # 1. Fuera del tablero
+            if not (0 <= x < 24 and 0 <= y < 24):
+                bullet.is_active = False
+                continue
+
+            # 2. Impacto con muro
+            for wall in next_game.walls:
+                if not wall.is_destroyed and wall.position == (x, y):
+                    wall.takeDamage(1)
+                    bullet.is_active = False
+                    break
+            if not bullet.is_active:
+                continue
+
+            # 3. Impacto con base
+            if bullet.team == 'A' and next_game.baseB.position == (x, y):
+                next_game.baseB.takeDamage()
+                bullet.is_active = False
+            elif bullet.team == 'B' and next_game.baseA.position == (x, y):
+                next_game.baseA.takeDamage()
+                bullet.is_active = False
+            if not bullet.is_active:
+                continue
+
+            # 4. Impacto con tanque
+            for t in all_tanks:
+                if t.is_alive and t.team != bullet.team and t.position == (x, y):
+                    t.takeDamage(1)
+                    bullet.is_active = False
+                    break
+
+            if bullet.is_active:
+                active_bullets.append(bullet)
+
+        next_game.bullets = active_bullets
+        next_game.current_time += 1
+        return next_game
     
     def evaluate_state(self, state, team='A'):
         """Función de evaluación para el estado del juego."""
