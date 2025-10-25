@@ -1,4 +1,4 @@
-from utils import *
+from ..utils import *
 import time
 import os
 import traceback
@@ -17,12 +17,37 @@ class BattleCityGame:
         self.baseA = None       # Estado de la base del equipo A
         self.baseB = None       # Estado de la base del equipo B
         self.bullets = []       # Estado de las balas
-        self.time_limit = 500   # pasos o turnos
+        # Límites de tiempo: soportamos tiempo en segundos para sincronizar con
+        # el reloj real y también mantenemos el contador de pasos (current_time)
+        self.time_limit = 500   # pasos o turnos (retrocompatibilidad)
         self.current_time = 0
+        self.time_limit_seconds = 120.0  # tiempo límite en segundos (por defecto 2 minutos)
+        self.elapsed_time = 0.0  # tiempo real transcurrido en segundos
 
     def initialize(self, layout):
-        # Inicializar el estado del juego basado en el diseño proporcionado
-        pass
+        """Inicializa el juego con un layout dado."""
+        for y in range(len(layout)):
+            for x in range(len(layout[y])):
+                cell = layout[y][x]
+                pos = (x, len(layout) - 1 - y)  # Invertir coordenada Y para que (0,0) esté en la esquina inferior izquierda
+                if cell == 'A':
+                    tank = Tank(position=pos, team='A')
+                    tank.spawn_position = pos
+                    self.teamA_tanks.append(tank)
+                elif cell == 'B':
+                    tank = Tank(position=pos, team='B')
+                    tank.spawn_position = pos
+                    self.teamB_tanks.append(tank)
+                elif cell == 'a':
+                    self.baseA = Base(position=pos, team='A')
+                elif cell == 'b':
+                    self.baseB = Base(position=pos, team='B')
+                elif cell == 'X':
+                    wall = Wall(position=pos, wall_type='brick')
+                    self.walls.append(wall)
+                elif cell == 'S':
+                    wall = Wall(position=pos, wall_type='steel')
+                    self.walls.append(wall)
     
     def getState(self):
         """Retorna el estado completo del juego"""
@@ -34,14 +59,17 @@ class BattleCityGame:
             'baseB': self.baseB.getState(),
             'bullets': [bullet.getState() for bullet in self.bullets],
             'current_time': self.current_time,
-            'time_limit': self.time_limit
+            'time_limit': self.time_limit,
+            'elapsed_time': self.elapsed_time,
+            'time_limit_seconds': self.time_limit_seconds
         }
     
     def is_terminal(self):
         """Verifica si el juego terminó."""
         if self.baseA.isDestroyed() or self.baseB.isDestroyed():
             return True
-        if self.current_time >= self.time_limit:
+        # También verificar tiempo real en segundos
+        if self.elapsed_time >= self.time_limit_seconds:
             return True
         return False
 
@@ -147,13 +175,56 @@ class BattleCityGame:
 
         elif action == 'FIRE':
             # Crear bala frente al tanque
+            # Cuando un tanque dispara estando pegado a un muro/objeto, la bala
+            # se creaba en la celda contigua y luego se movía una celda más
+            # antes de comprobar colisiones, lo que provocaba que atravesara
+            # el objeto. Aquí comprobamos colisiones inmediatas en la celda
+            # de spawn antes de crear la bala.
             if tank.direction is not None:
                 dx, dy = DIR_DELTA[tank.direction]
                 bullet_pos = (tank.position[0] + dx, tank.position[1] + dy)
                 if 0 <= bullet_pos[0] < 24 and 0 <= bullet_pos[1] < 24:
-                    next_game.bullets.append(
-                        Bullet(bullet_pos, tank.direction, tank.team, owner_id=tankIndex)
-                    )
+                    # Impedir disparos múltiples: un tanque solo puede tener
+                    # una bala activa a la vez (por owner_id)
+                    already_has_bullet = False
+                    for b in next_game.bullets:
+                        if b.owner_id == tankIndex and b.is_active:
+                            already_has_bullet = True
+                            break
+                    if already_has_bullet:
+                        immediate_hit = True  # bloquear la creación
+                    else:
+                        immediate_hit = False
+
+                    # 1) Impacto inmediato con muro
+                    for wall in next_game.walls:
+                        if not wall.is_destroyed and wall.position == bullet_pos:
+                            wall.takeDamage(1)
+                            immediate_hit = True
+                            break
+
+                    # 2) Impacto inmediato con base enemiga
+                    if not immediate_hit:
+                        if tank.team == 'A' and next_game.baseB and next_game.baseB.position == bullet_pos:
+                            next_game.baseB.takeDamage()
+                            immediate_hit = True
+                        elif tank.team == 'B' and next_game.baseA and next_game.baseA.position == bullet_pos:
+                            next_game.baseA.takeDamage()
+                            immediate_hit = True
+
+                    # 3) Impacto inmediato con tanque enemigo
+                    if not immediate_hit:
+                        for t in all_tanks:
+                            if t.is_alive and t.team != tank.team and t.position == bullet_pos:
+                                t.takeDamage(1)
+                                immediate_hit = True
+                                break
+
+                    # Si no hubo impacto inmediato, crear la bala normalmente
+                    if not immediate_hit:
+                        next_game.bullets.append(
+                            Bullet(bullet_pos, tank.direction, tank.team, owner_id=tankIndex)
+                        )
 
         # --- Mover balas ---
         active_bullets = []
@@ -200,6 +271,22 @@ class BattleCityGame:
         next_game.bullets = active_bullets
         next_game.current_time += 1
         return next_game
+    
+    def advance_time(self, delta_seconds):
+        """Avanza el tiempo real del juego y maneja respawns.
+
+        delta_seconds: segundos transcurridos desde la última llamada.
+        """
+        self.elapsed_time += delta_seconds
+
+        # Manejar respawn de tanques muertos
+        for t in self.teamA_tanks + self.teamB_tanks:
+            if not t.is_alive and getattr(t, 'respawn_timer', 0) > 0:
+                t.respawn_timer -= delta_seconds
+                if t.respawn_timer <= 0:
+                    t.respawn()
+
+    # Nota: is_terminal usa elapsed_time para decidir empates por tiempo
     
     def evaluate_state(self, state, team='A'):
         """Función de evaluación para el estado del juego."""
