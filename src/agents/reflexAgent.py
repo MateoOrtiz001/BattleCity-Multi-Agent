@@ -1,5 +1,5 @@
 
-from battleCity_Class.tank import Tank
+from gameClass.tank import Tank
 
 class ReflexTankAgent(Tank):
     def getAction(self, state):
