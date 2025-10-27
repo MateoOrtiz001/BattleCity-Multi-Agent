@@ -1,4 +1,4 @@
-def get_layout():
+def get_level2():
     """
     Retorna un layout simple de 24x24 para Battle City
     'A': Tanque equipo A
@@ -10,26 +10,18 @@ def get_layout():
     ' ': Espacio vacío
     """
     layout = [
-        "   x   x             ",  # 21
-        " a X A S             ",  # 20
-        "            XXXXS    ",  # 19
-        "XX                   ",  # 18
-        "    XXXXXX  X X      ",  # 17
-        " A  X  S X  X X      ",  # 16
-        "    X  S X  X X      ",  # 15
-        "XS  XXXXXX  X X   XXX",  # 14
-        "            X X      ",  # 13
-        "                     ",  # 12
-        "  XXXS    S    SXXX  ",  # 11
-        "                     ",  # 10
-        "      X X            ",  # 9
-        "XXX   X X  XXXXXX  SX",  # 8
-        "      X X  X S  X    ",  # 7
-        "      X X  X S  X  B ",  # 6
-        "      X X  XXXXXX    ",  # 5
-        "                   XX",  # 4
-        "     SXXX            ",  # 3
-        "             S B X b ",  # 2
-        "             X   X   ",  # 1
+        "B           B",  # 13
+        "   XXX XXX   ",  # 12
+        "             ",  # 11
+        "  XX X X XX  ",  # 10
+        "S XX X X XX S",  # 9
+        "             ",  # 8
+        "   S XXX S   ",  # 7
+        " X X X X X X ",  # 6
+        "   X XXX X   ",  # 5
+        "S XX     XX S",  # 4
+        "             ",  # 3
+        "   S XXX S   ",  # 2
+        "    AXbX     ",  # 1
     ]
     return layout

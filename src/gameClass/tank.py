@@ -4,13 +4,10 @@ class Tank():
     def __init__(self, position, team):
         self.position = position        # Posición del tanque
         self.spawn_position = position  # Posición donde reaparecerá tras ser destruido
-        self.direction = None            # Dirección del tanque ('UP','DOWN','LEFT','RIGHT')
+        self.direction = None           # Dirección del tanque ('UP','DOWN','LEFT','RIGHT')
         self.team = team                # Equipo al que pertenece el tanque ('A' o 'B')
         self.is_alive = True            # Estado del tanque (vivo o destruido)
-        self.health = 3                  # Salud del tanque
-        self.max_health = 3
-        # Temporizador para respawn (segundos). Cuando el tanque muere se configura
-        # y la lógica de juego lo decrementará hasta reaparecer.
+        self.health = 3                 # Salud del tanque}
         self.respawn_timer = 0.0
         
     def getState(self):
@@ -43,6 +40,6 @@ class Tank():
     def respawn(self):
         """Reaparecer el tanque en su posición de spawn y resetear su salud."""
         self.position = self.spawn_position
-        self.health = self.max_health
+        self.health = 3
         self.is_alive = True
         self.respawn_timer = 0.0

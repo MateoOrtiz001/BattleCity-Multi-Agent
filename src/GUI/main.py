@@ -6,13 +6,15 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.gameClass.game import BattleCityGame
-#from src.gameClass.scenarios.level1 import get_layout
-from src.gameClass.scenarios.level2 import get_layout
+from src.gameClass.scenarios.level1 import get_level1
+from src.gameClass.scenarios.level2 import get_level2
+from src.gameClass.scenarios.level3 import get_level3
+from src.gameClass.scenarios.level4 import get_level4
 
 # Inicializar Pygame
 pygame.init()
-CELL_SIZE = 32
-GRID_SIZE = 21
+CELL_SIZE = 32  # Mayor tamaño de celda para el tablero más pequeño
+GRID_SIZE = 21   # 8x8 más los bordes
 WIDTH, HEIGHT = CELL_SIZE * GRID_SIZE, CELL_SIZE * GRID_SIZE
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Battle City AI Prototype")
@@ -30,8 +32,8 @@ COLORS = {
 }
 
 # Crear juego
-game = BattleCityGame()  # Asegúrate de inicializarlo con tanques, muros y bases
-game.initialize(get_layout())  # Usar el layout definido en level1.py
+game = BattleCityGame(board_size=8)  # Tablero 8x8
+game.initialize(get_level1())  # Usar el layout pequeño
 running = True
 
 def draw_game():
@@ -46,16 +48,14 @@ def draw_game():
             pygame.draw.rect(screen, color, (x*CELL_SIZE, (GRID_SIZE-1-y)*CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
     # Bases
-    for base in [game.baseA, game.baseB]:
-        if not base.is_destroyed:
-            x, y = base.position
-            pygame.draw.rect(screen, COLORS['base'], (x*CELL_SIZE, (GRID_SIZE-1-y)*CELL_SIZE, CELL_SIZE, CELL_SIZE))
+    if not game.base.is_destroyed:
+        x, y = game.base.position
+        pygame.draw.rect(screen, COLORS['base'], (x*CELL_SIZE, (GRID_SIZE-1-y)*CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
     # Tanques
-    for tank in game.teamA_tanks:
-        if tank.is_alive:
-            x, y = tank.position
-            pygame.draw.rect(screen, COLORS['tankA'], (x*CELL_SIZE, (GRID_SIZE-1-y)*CELL_SIZE, CELL_SIZE, CELL_SIZE))
+    if game.teamA_tank.is_alive:
+        x, y = game.teamA_tank.position
+        pygame.draw.rect(screen, COLORS['tankA'], (x*CELL_SIZE, (GRID_SIZE-1-y)*CELL_SIZE, CELL_SIZE, CELL_SIZE))
     for tank in game.teamB_tanks:
         if tank.is_alive:
             x, y = tank.position
@@ -73,7 +73,7 @@ def draw_game():
 def handle_input():
     global game
     keys = pygame.key.get_pressed()
-    tank = game.getState()['teamA_tanks'][0]  # controlamos solo el primer tanque de A
+    tank = game.getState()['teamA_tank']  # controlamos solo el primer tanque de A
 
     if keys[pygame.K_UP]:
         game = game.generateSuccessor(0, 'MOVE_UP')
