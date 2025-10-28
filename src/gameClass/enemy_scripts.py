@@ -1,5 +1,5 @@
 import random
-from ..utils import manhattanDistance # (Asegúrate de importar tu función de distancia)
+from ..utils import manhattanDistance
 
 class ScriptedEnemyAgent:
     """

@@ -14,6 +14,11 @@ class BattleCityGame:
         self.board_size = board_size        # Tamaño del tablero (board_size x board_size)
         self.teamA_tank = None              # Estado del tanque     
         self.teamB_tanks = []               # Estado de los tanques del enemigo
+        # Mapeo opcional de controladores externos por índice de agente (1..n)
+        # Por ejemplo: {1: ScriptedEnemyAgent(1), 2: ScriptedEnemyAgent(2)}
+        # Estos controladores serán respetados por los algoritmos de búsqueda
+        # y pueden ser usados por el bucle de juego para obtener acciones.
+        self.scripted_agents = {}
         self.walls = []                     # Estado de las paredes
         self.base = None                    # Estado de la base del enemigo
         self.bullets = []                   # Estado de las balas
