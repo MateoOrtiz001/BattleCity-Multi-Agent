@@ -7,6 +7,7 @@ from src.gameClass.scenarios.level2 import get_level2
 from src.gameClass.scenarios.level3 import get_level3
 from src.gameClass.scenarios.level4 import get_level4
 from src.agents.minimax import MinimaxAgent, AlphaBetaAgent
+from src.agents.expectimax import ExpectimaxAgent
 from src.agents.mcts import MCTSAgent
 from src.gameClass.tank import Tank
 from src.gameClass.walls import Wall
@@ -27,9 +28,9 @@ clock = pygame.time.Clock()
 COLORS = {
     'background': (0, 0, 0),
     'brick': (200, 80, 50),
-    'steel': (130, 130, 130),
-    'tankA': (0, 200, 0),
-    'tankB': (0, 100, 255),
+    'steel': (235, 235, 235),
+    'tankA': (186, 177, 154),
+    'tankB': (145, 145, 145),
     'base': (255, 255, 0),
     'bullet': (255, 255, 255),
     'text': (255, 255, 255),
@@ -127,6 +128,9 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
         AgentClass = MCTSAgent
         # default simulations; you can tune this when calling run_visual_game
         kwargs = {'simulations': 300, 'rollout_depth': 40, 'time_limit': 1.0}
+    elif agent_type.lower() == 'expectimax':
+        AgentClass = ExpectimaxAgent
+        kwargs = {'depth': str(max(1, depth // 4))}
     else:
         AgentClass = AlphaBetaAgent
         kwargs = {'depth': str(max(1, depth // 4))}
@@ -231,7 +235,7 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
 
 if __name__ == "__main__":
     # Configuración de la partida
-    AGENT_TYPE = "alphabeta"  # "minimax", "alphabeta" or "mcts"
+    AGENT_TYPE = "expectimax"  # "minimax", "alphabeta" or "mcts"
     DEPTH = 16  # Profundidad de búsqueda (múltiplo de 4 recomendado)
     LEVEL = get_level1  # Nivel a usar
     FPS = 10  # Velocidad de visualización

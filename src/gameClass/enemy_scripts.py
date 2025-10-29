@@ -55,7 +55,7 @@ class ScriptedEnemyAgent:
                 
                 if new_dist < min_dist:
                     min_dist = new_dist
-                    best_move = action
+                    best_move = action if random.random() < 0.7 else best_move  # 70% de probabilidad de elegir la mejor
                 
                 move_actions.append(action)
 

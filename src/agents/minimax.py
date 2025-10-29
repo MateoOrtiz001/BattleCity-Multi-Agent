@@ -10,6 +10,9 @@ class MinimaxAgent():
         self.index = tankIndex  # Índice del tanque que controla este agente
         self.depth = int(depth)  # Debe ser múltiplo de 4 para completar un ciclo de todos los tanques
         self.expanded_nodes = 0  # Contador de nodos expandidos
+        # Para permitir un corte por tiempo similar a AlphaBetaAgent
+        self.start_time = 0
+        self.time_limit = 1.0
 
     def getAction(self, gameState):
         """
@@ -38,6 +41,11 @@ class MinimaxAgent():
         num_tanks = 1 + len(gameState.teamB_tanks)
         def minimax(state, depth, tank_index):
             self.expanded_nodes += 1
+            # Corte por tiempo
+            import time
+            if time.time() - self.start_time > self.time_limit:
+                # devolver evaluación del estado actual si se agota el tiempo
+                return state.evaluate_state(state.getState())
             if depth >= self.depth or state.is_terminal():
                 return state.evaluate_state(state.getState())
 
@@ -51,6 +59,9 @@ class MinimaxAgent():
             if is_team_a:  # Equipo A maximiza
                 max_eval = float('-inf')
                 for action in state.getLegalActions(tank_index):
+                    # Comprobar tiempo antes de generar sucesor costoso
+                    if time.time() - self.start_time > self.time_limit:
+                        break
                     successor = state.generateSuccessor(tank_index, action)
                     eval = minimax(successor, next_depth, next_tank)
                     max_eval = max(max_eval, eval)
@@ -58,10 +69,13 @@ class MinimaxAgent():
             else:  # Equipo B minimiza
                 min_eval = float('inf')
                 for action in state.getLegalActions(tank_index):
+                    if time.time() - self.start_time > self.time_limit:
+                        break
                     successor = state.generateSuccessor(tank_index, action)
                     eval = minimax(successor, next_depth, next_tank)
                     min_eval = min(min_eval, eval)
                 return min_eval
+        import time
         # Obtener acciones legales
         legal_actions = gameState.getLegalActions(self.index)
         if not legal_actions:
@@ -74,7 +88,11 @@ class MinimaxAgent():
         # Obtener siguiente tanque
         next_tank = (self.index + 1) % num_tanks
         
+        # iniciar el tiempo de búsqueda
+        self.start_time = time.time()
         for action in legal_actions:
+            if time.time() - self.start_time > self.time_limit:
+                break
             successor = gameState.generateSuccessor(self.index, action)
             eval = minimax(successor, 0, next_tank)
             
