@@ -61,7 +61,7 @@ class ScriptedEnemyAgent:
 
         # 2. Decidir si disparar (con un poco de aleatoriedad)
         # Por ejemplo, 20% de probabilidad de disparar si es legal
-        if 'FIRE' in legal_actions and random.random() < 0.2:
+        if 'FIRE' in legal_actions and random.random() < 0.6:
             return 'FIRE'
         
         # 3. Si el mejor movimiento es STOP (atascado), elige uno al azar

@@ -7,7 +7,7 @@ from src.gameClass.scenarios.level2 import get_level2
 from src.gameClass.scenarios.level3 import get_level3
 from src.gameClass.scenarios.level4 import get_level4
 from src.agents.minimax import MinimaxAgent, AlphaBetaAgent
-from src.agents.expectimax import ExpectimaxAgent
+from src.agents.expectimax import ExpectimaxAgent, ExpectimaxAlphaBetaAgent
 from src.agents.mcts import MCTSAgent
 from src.gameClass.tank import Tank
 from src.gameClass.walls import Wall
@@ -36,7 +36,7 @@ COLORS = {
     'text': (255, 255, 255),
 }
 
-def draw_game(game):
+def draw_game(game, last_actions=None):
     """Dibuja el estado actual del juego."""
     screen.fill(COLORS['background'])
 
@@ -92,6 +92,30 @@ def draw_game(game):
     time_surface = font.render(time_text, True, COLORS['text'])
     screen.blit(time_surface, (WIDTH//2 - 50, 10))
 
+    # Mostrar score (evaluación heurística del estado)
+    try:
+        score_val = game.evaluate_state(None)
+    except Exception:
+        try:
+            score_val = game.evaluate_state(game.getState())
+        except Exception:
+            score_val = None
+
+    if score_val is not None:
+        score_text = f"Score: {score_val:.1f}"
+        score_surface = font.render(score_text, True, COLORS['text'])
+        screen.blit(score_surface, (WIDTH - 180, 10))
+
+    # Mostrar acciones recientes por tanque (si se pasaron)
+    if last_actions:
+        # Dibujar cada acción en la esquina superior izquierda, bajo la info de base
+        y_off = 40
+        for idx, act in enumerate(last_actions):
+            act_text = f"T{idx}: {str(act)}"
+            act_surface = font.render(act_text, True, COLORS['text'])
+            screen.blit(act_surface, (10, y_off))
+            y_off += 18
+
     pygame.display.flip()
 
 def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=5):
@@ -131,6 +155,9 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
     elif agent_type.lower() == 'expectimax':
         AgentClass = ExpectimaxAgent
         kwargs = {'depth': str(max(1, depth // 4))}
+    elif agent_type.lower() == 'expectimax_ab':
+        AgentClass = ExpectimaxAlphaBetaAgent
+        kwargs = {'depth': str(max(1, depth // 4))}
     else:
         AgentClass = AlphaBetaAgent
         kwargs = {'depth': str(max(1, depth // 4))}
@@ -153,6 +180,8 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
         game.scripted_agents = {}
     # Número total de tanques
     num_tanks = len(game.teamA_tanks) + len(game.teamB_tanks)
+    # Trackear la última acción tomada por cada tanque para depuración/visualización
+    last_actions = [None] * max(1, num_tanks)
     # Nota: ya que nuestro BattleCityGame implementa generateSuccessor que avanza
     # balas/tiempo tras el último tanque, aplicaremos acciones por turnos secuenciales.
     
@@ -174,7 +203,7 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
         
         if game.is_terminal():
             # Mostrar resultado final por 3 segundos
-            draw_game(game)
+            draw_game(game, last_actions)
             pygame.display.flip()
             time.sleep(3)
             break
@@ -192,6 +221,11 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
             if scripted and (tank_index in scripted):
                 act = scripted[tank_index].getAction(game)
                 game = game.generateSuccessor(tank_index, act)
+                # registrar acción
+                try:
+                    last_actions[tank_index] = act
+                except Exception:
+                    pass
                 single_agent.suppress_output = False
                 continue
 
@@ -201,6 +235,11 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
             try:
                 act = single_agent.getAction(game)
                 game = game.generateSuccessor(tank_index, act)
+                # registrar acción
+                try:
+                    last_actions[tank_index] = act
+                except Exception:
+                    pass
             finally:
                 if prev_index is not None:
                     single_agent.index = prev_index
@@ -208,7 +247,13 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
         turn += 1
 
         # Dibujar el estado actual
-        draw_game(game)
+        draw_game(game, last_actions)
+        # También imprimir info en consola breve para depuración
+        try:
+            s = game.evaluate_state(None)
+            print(f"Turn {turn} | Score: {s:.1f} | reserves_A={getattr(game,'reserves_A',None)} reserves_B={getattr(game,'reserves_B',None)}")
+        except Exception:
+            pass
         clock.tick(fps)  # Controlar la velocidad de actualización
     
     # Cerrar ventana
@@ -235,10 +280,10 @@ def run_visual_game(agent_type="alphabeta", depth=4, level_func=get_level1, fps=
 
 if __name__ == "__main__":
     # Configuración de la partida
-    AGENT_TYPE = "expectimax"  # "minimax", "alphabeta" or "mcts"
-    DEPTH = 16  # Profundidad de búsqueda (múltiplo de 4 recomendado)
+    AGENT_TYPE = "expectimax_ab"  # "minimax", "alphabeta" or "mcts" or "expectimax" or "expectimax_ab"
+    DEPTH = 128  # Profundidad de búsqueda (múltiplo de 4 recomendado)
     LEVEL = get_level1  # Nivel a usar
-    FPS = 10  # Velocidad de visualización
+    FPS = 60  # Velocidad de visualización
     
     print(f"Iniciando partida visual con {AGENT_TYPE.upper()}...")
     run_visual_game(AGENT_TYPE, DEPTH, LEVEL, FPS)

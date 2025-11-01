@@ -7,9 +7,12 @@ class Bullet:
         self.team = team                  # 'A' o 'B'
         self.owner_id = owner_id          # índice del tanque que la disparó
         self.is_active = True             # Si la bala sigue en vuelo
+        self.prev_position = None         # posición previa (útil para detectar choques cabeza-a-cabeza)
 
     def move(self):
         """Avanza una celda en su dirección."""
+        # Guardar la posición previa antes de mover (útil para detección de colisiones entre balas)
+        self.prev_position = self.position
         dx, dy = 0, 0
         if self.direction == 'UP': dy = 1
         elif self.direction == 'DOWN': dy = -1
