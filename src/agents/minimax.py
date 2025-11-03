@@ -15,96 +15,73 @@ class MinimaxAgent():
         self.time_limit = 1.0
 
     def getAction(self, gameState):
+        """Minimax search for multi-agent BattleCity.
+
+        This implementation treats the agent with index self.index as the
+        maximizing player; all other agents are treated as adversaries
+        (minimizers). Depth is counted in "full-turns": we increment the
+        depth when we cycle back to the root agent.
         """
-        Returns the minimax action from the current gameState using self.depth
-        and self.evaluationFunction.
+        import time
 
-        Here are some method calls that might be useful when implementing minimax.
+        num_tanks = gameState.getNumAgents()
 
-        gameState.getLegalActions(agentIndex):
-        Returns a list of legal actions for an agent
-        agentIndex=0 means Pacman, ghosts are >= 1
+        # Use the attribute 'index' if present, otherwise assume 0
+        root_index = getattr(self, 'index', 0)
 
-        gameState.generateSuccessor(agentIndex, action):
-        Returns the successor game state after an agent takes an action
+        self.start_time = time.time()
 
-        gameState.getNumAgents():
-        Returns the total number of agents in the game
-
-        gameState.isWin():
-        Returns whether or not the game state is a winning state
-
-        gameState.isLose():
-        Returns whether or not the game state is a losing state
-        """
-        "*** YOUR CODE HERE ***"
-        num_tanks = 1 + len(gameState.teamB_tanks)
-        def minimax(state, depth, tank_index):
+        def minimax(state, depth, agent_index):
             self.expanded_nodes += 1
-            # Corte por tiempo
-            import time
+
+            # Time cutoff
             if time.time() - self.start_time > self.time_limit:
-                # devolver evaluación del estado actual si se agota el tiempo
                 return state.evaluate_state(state.getState())
+
+            # Terminal or max depth reached
             if depth >= self.depth or state.is_terminal():
                 return state.evaluate_state(state.getState())
 
-            # Determinar si es un tanque del equipo A (maximizador) o B (minimizador)
-            is_team_a = tank_index == 1
-            
-            # Calcular el siguiente tanque y profundidad
-            next_tank = (tank_index + 1) % num_tanks
-            next_depth = depth + 1 if next_tank == 0 else depth
-            
-            if is_team_a:  # Equipo A maximiza
-                max_eval = float('-inf')
-                for action in state.getLegalActions(tank_index):
-                    # Comprobar tiempo antes de generar sucesor costoso
+            next_agent = (agent_index + 1) % num_tanks
+            # Increase depth when we've completed a full cycle back to root
+            next_depth = depth + 1 if next_agent == root_index else depth
+
+            # If this agent is the maximizer (the one that called getAction)
+            if agent_index == root_index:
+                v = float('-inf')
+                for action in state.getLegalActions(agent_index):
                     if time.time() - self.start_time > self.time_limit:
                         break
-                    successor = state.generateSuccessor(tank_index, action)
-                    eval = minimax(successor, next_depth, next_tank)
-                    max_eval = max(max_eval, eval)
-                return max_eval
-            else:  # Equipo B minimiza
-                min_eval = float('inf')
-                for action in state.getLegalActions(tank_index):
+                    succ = state.generateSuccessor(agent_index, action)
+                    v = max(v, minimax(succ, next_depth, next_agent))
+                return v
+            else:
+                # Minimizing adversary
+                v = float('inf')
+                for action in state.getLegalActions(agent_index):
                     if time.time() - self.start_time > self.time_limit:
                         break
-                    successor = state.generateSuccessor(tank_index, action)
-                    eval = minimax(successor, next_depth, next_tank)
-                    min_eval = min(min_eval, eval)
-                return min_eval
-        import time
-        # Obtener acciones legales
-        legal_actions = gameState.getLegalActions(self.index)
+                    succ = state.generateSuccessor(agent_index, action)
+                    v = min(v, minimax(succ, next_depth, next_agent))
+                return v
+
+        legal_actions = gameState.getLegalActions(root_index)
         if not legal_actions:
-            return 'STOP'  # Si no hay acciones legales, detenerse
-            
-        # Inicializar búsqueda desde el tanque actual
-        best_score = float('-inf') if self.index == 1 else float('inf')
-        best_action = legal_actions[0]  # Asignar una acción por defecto (primera acción legal)
-        
-        # Obtener siguiente tanque
-        next_tank = (self.index + 1) % num_tanks
-        
-        # iniciar el tiempo de búsqueda
-        self.start_time = time.time()
+            return 'STOP'
+
+        best_action = legal_actions[0]
+        best_score = float('-inf')
+
+        # Evaluate each root action
         for action in legal_actions:
             if time.time() - self.start_time > self.time_limit:
                 break
-            successor = gameState.generateSuccessor(self.index, action)
-            eval = minimax(successor, 0, next_tank)
-            
-            if self.index == 1:  # Equipo A maximiza
-                if eval > best_score:
-                    best_score = eval
-                    best_action = action
-            else:  # Equipo B minimiza
-                if eval < best_score:
-                    best_score = eval
-                    best_action = action
-        
+            succ = gameState.generateSuccessor(root_index, action)
+            score = minimax(succ, 0, (root_index + 1) % num_tanks)
+            if score > best_score:
+                best_score = score
+                best_action = action
+
         return best_action
 
 class AlphaBetaAgent():
@@ -194,7 +171,7 @@ class AlphaBetaAgent():
             return state.evaluate_state(state.getState())
             
         num_tanks = 1 + len(state.teamB_tanks)
-        is_team_a = tank_index == 1
+        is_team_a = tank_index == 0
         next_tank = (tank_index + 1) % num_tanks
         next_depth = current_depth + 1 if next_tank == 0 else current_depth
         

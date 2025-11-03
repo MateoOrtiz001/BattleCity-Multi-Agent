@@ -1,1 +1,1 @@
-from .game import BattleCityGame
+from .game import BattleCityState

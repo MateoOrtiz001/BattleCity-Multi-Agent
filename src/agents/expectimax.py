@@ -1,262 +1,187 @@
-from ..utils import manhattanDistance, lookup
+from ..utils import manhattanDistance
 import time
+import random
 
-class ExpectimaxAgent():
-    """
-      Your expectimax agent (question 4)
-    """
-    def __init__(self, depth='2', tankIndex=0):
-        self.agentIndex = tankIndex
-        self.depth = int(depth)
-        # Para búsqueda iterativa
-        self.start_time = 0
-        self.time_limit = 1.0
+class ExpectimaxAgent:
+    def __init__(self, depth=2, time_limit=None):
+        self.depth = depth
+        self.time_limit = time_limit
+        self.start_time = None
+        self.node_count = 0   # <--- NUEVO
+
+    def is_time_exceeded(self):
+        return (
+            self.time_limit is not None
+            and (time.time() - self.start_time) > self.time_limit
+        )
 
     def getAction(self, gameState):
-        """
-        Returns the expectimax action using self.depth and self.evaluationFunction
-
-        All ghosts should be modeled as choosing uniformly at random from their
-        legal moves.
-        """
-        "*** YOUR CODE HERE ***"
-        num_agents = gameState.getNumAgents()
-
-        def probabilityActions(gameState, agentIndex):
-            """Devuelve un dict action->probabilidad para el agente `agentIndex`.
-            Heurística simple: dar prob 0.5 a la mejor acción (la que reduce la distancia
-            a la base) y repartir 0.5 entre las demás. La distribución está normalizada.
-            """
-            legalActions = gameState.getLegalActions(agentIndex)
-            actionProbabilities = {}
-            if not legalActions:
-                return actionProbabilities
-
-            # Asumimos agentIndex >= 1 aquí (agentes enemigos) y que teamB_tanks está
-            # indexado desde 0 correspondiente a agentIndex == 1
-            tank = gameState.teamB_tanks[agentIndex - 1]
-            basePos = gameState.base.position
-            minDist = manhattanDistance(tank.position, basePos)
-
-            # Seleccionar una acción por defecto
-            bestAction = legalActions[0]
-
-            # Buscar acción que reduzca más la distancia (entre MOVE_*)
-            for action in legalActions:
-                if action.startswith('MOVE_'):
-                    tankPos = tank.position
-                    if action == 'MOVE_UP': nextPos = (tankPos[0], tankPos[1] + 1)
-                    elif action == 'MOVE_DOWN': nextPos = (tankPos[0], tankPos[1] - 1)
-                    elif action == 'MOVE_LEFT': nextPos = (tankPos[0] - 1, tankPos[1])
-                    elif action == 'MOVE_RIGHT': nextPos = (tankPos[0] + 1, tankPos[1])
-                    else:
-                        continue
-
-                    dist = manhattanDistance(nextPos, basePos)
-                    if dist < minDist:
-                        minDist = dist
-                        bestAction = action
-
-            n = len(legalActions)
-            if n == 1:
-                actionProbabilities[legalActions[0]] = 1.0
-                return actionProbabilities
-
-            # Distribución: 0.5 al mejor, resto uniformemente al resto
-            p_best = 0.5
-            p_other = 0.5 / (n - 1)
-            for action in legalActions:
-                actionProbabilities[action] = p_other
-            actionProbabilities[bestAction] = p_best
-
-            return actionProbabilities
-                
-        def max_value(state,depth,agent_index, max_depth):
-            v = float('-inf')
-            next_agent = (agent_index + 1) % num_agents
-            if next_agent == 0:
-                next_depth = depth + 1
-            else:
-                next_depth = depth
-            for action in state.getLegalActions(agent_index):
-                successor = state.generateSuccessor(agent_index,action)
-                eval = expectimax(successor,next_depth,max_depth,next_agent)
-                v = max(v, eval)
-            return v
-        def exp_value(state,depth,agent_index, max_depth):
-            v = 0
-            next_agent = (agent_index + 1) % num_agents
-            if next_agent == 0:
-                next_depth = depth + 1
-            else:
-                next_depth = depth
-            prob = probabilityActions(state, agent_index)
-            for action in state.getLegalActions(agent_index):
-                p = prob.get(action, 0)
-                successor = state.generateSuccessor(agent_index,action)
-                v += p * expectimax(successor, next_depth, max_depth, next_agent)
-            return v
-                
-        def expectimax(gameState, depth, max_depth, agent_index):
-            # Corte por profundidad o estado terminal
-            if depth >= max_depth or gameState.is_terminal():
-                return gameState.evaluate_state(gameState.getState())
-            if agent_index == 0:
-                return max_value(gameState, depth, agent_index, max_depth)
-            else:
-                return exp_value(gameState, depth, agent_index, max_depth)
-        # --- Iterative deepening por turnos completos (4 niveles por turno) ---
-        import time
         self.start_time = time.time()
+        self.node_count = 0  # <--- Reiniciar contador en cada decisión
 
-        legal_actions = gameState.getLegalActions(0)
-        if not legal_actions:
-            return 'STOP'
+        num_agents = gameState.getNumAgents()
+        best_overall_score = float("-inf")
+        best_overall_action = None
 
-        best_overall_action = legal_actions[0]
+        def expectimax(state, depth, max_depth, agent_index):
+            # --- Contamos cada expansión ---
+            self.node_count += 1
 
-        # depth en la interfaz del agente está en "turnos"; cada turno completo son 4 niveles
-        for current_max in range(4, (self.depth * 4) + 1, 4):
-            # comprobar tiempo
-            if time.time() - self.start_time > self.time_limit:
+            # Condición de parada
+            if depth >= max_depth or self.is_time_exceeded() or state.isWin() or state.isLose() or state.isLimitTime():
+                return state.evaluate_state()
+
+            next_agent = (agent_index + 1) % num_agents
+            next_depth = depth + 1
+            legal_actions = state.getLegalActions(agent_index)
+            if not legal_actions:
+                return state.evaluate_state()
+
+            # MAX node
+            if agent_index == 0:
+                value = float("-inf")
+                for action in legal_actions:
+                    if self.is_time_exceeded():
+                        break
+                    succ = state.getSuccessor(agent_index, action)
+                    eval_val = expectimax(succ, next_depth, max_depth, next_agent)
+                    value = max(value, eval_val)
+                return value
+            # CHANCE node
+            else:
+                total = 0.0
+                prob = self.probabilityActions(state, agent_index, legal_actions)
+                for action in legal_actions:
+                    if self.is_time_exceeded():
+                        break
+                    succ = state.getSuccessor(agent_index, action)
+                    total += prob[action] * expectimax(succ, next_depth, max_depth, next_agent)
+                return total
+
+        # --- Iterative deepening ---
+        for current_max in range(3, (self.depth * 3) + 1, 3):
+            if self.is_time_exceeded():
                 break
 
             current_best_action = None
-            current_best_score = float('-inf')
+            current_best_score = float("-inf")
 
-            next_agent = (0 + 1) % num_agents
-            for action in legal_actions:
-                if time.time() - self.start_time > self.time_limit:
+            for action in gameState.getLegalActions(0):
+                if self.is_time_exceeded():
                     break
-                successor = gameState.generateSuccessor(0, action)
-                val = expectimax(successor, 0, current_max, next_agent)
+                successor = gameState.getSuccessor(0, action)
+                val = expectimax(successor, 0, current_max, 0)
                 if val > current_best_score:
                     current_best_score = val
                     current_best_action = action
 
             if current_best_action is not None:
                 best_overall_action = current_best_action
+                best_overall_score = current_best_score
+
+            # --- Mostrar progreso por iteración ---
+            print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
 
         return best_overall_action
-class ExpectimaxAlphaBetaAgent():
-    """Expectimax con poda alpha-beta aplicada en nodos MAX (agente 0).
-    Nota: la poda en nodos de expectativa (chance nodes) es más delicada y
-    no se aplica aquí para mantener la corrección. Esto sigue ofreciendo
-    poda útil en los niveles MAX mientras calcula la esperanza exacta en
-    los nodos de chance.
-    """
-    def __init__(self, depth='2', tankIndex=0):
-        self.agentIndex = tankIndex
-        self.depth = int(depth)
-        self.start_time = 0
-        self.time_limit = 1.0
+
+    
+    def probabilityActions(self, state, agentIndex, legalActions):
+        """
+        Devuelve una distribución de probabilidad suave para las acciones del enemigo.
+        Se priorizan las acciones más cercanas a la base enemiga.
+        """
+        probs = {}
+        if not legalActions:
+            return {}
+
+        best_action = legalActions[0]
+        best_score = float("inf")
+
+        enemy = state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None
+        if enemy is None or not enemy.isAlive():
+            # Distribución uniforme si el tanque enemigo está muerto
+            uniform = 1.0 / len(legalActions)
+            return {a: uniform for a in legalActions}
+
+        for action in legalActions:
+            succ = state.getSuccessor(agentIndex, action)
+            # heurística simple: distancia a base enemiga
+            base_pos = succ.getBase().getPosition() if agentIndex != 0 else state.getTeamBBase().getPosition()
+            dist = manhattanDistance(enemy.getPos(), base_pos)
+            if dist < best_score:
+                best_score, best_action = dist, action
+
+        # Distribución suave (acción mejor con 0.6, resto uniforme)
+        for action in legalActions:
+            probs[action] = 0.8 if action == best_action else 0.2 / (len(legalActions) - 1)
+        return probs
+
+class ExpectimaxAlphaBetaAgent:
+    def __init__(self, evalFn='evaluate_state', depth=2):
+        self.index = 0
+        self.evaluationFunction = evalFn
+        self.depth = depth
 
     def getAction(self, gameState):
         num_agents = gameState.getNumAgents()
+        root_index = self.index
 
-        def probabilityActions(gameState, agentIndex):
-            legalActions = gameState.getLegalActions(agentIndex)
-            actionProbabilities = {}
-            if not legalActions:
-                return actionProbabilities
+        def expectimax(state, depth, agent_index):
+            if depth == self.depth or state.isTerminal():
+                return self.evaluationFunction(state.getState())
 
-            tank = gameState.teamB_tanks[agentIndex - 1]
-            basePos = gameState.base.position
-            minDist = manhattanDistance(tank.position, basePos)
-            bestAction = legalActions[0]
-            for action in legalActions:
-                if action.startswith('MOVE_'):
-                    tankPos = tank.position
-                    if action == 'MOVE_UP': nextPos = (tankPos[0], tankPos[1] + 1)
-                    elif action == 'MOVE_DOWN': nextPos = (tankPos[0], tankPos[1] - 1)
-                    elif action == 'MOVE_LEFT': nextPos = (tankPos[0] - 1, tankPos[1])
-                    elif action == 'MOVE_RIGHT': nextPos = (tankPos[0] + 1, tankPos[1])
-                    else:
-                        continue
-                    dist = manhattanDistance(nextPos, basePos)
-                    if dist < minDist:
-                        minDist = dist
-                        bestAction = action
-
-            n = len(legalActions)
-            if n == 1:
-                actionProbabilities[legalActions[0]] = 1.0
-                return actionProbabilities
-
-            p_best = 0.5
-            p_other = 0.5 / (n - 1)
-            for action in legalActions:
-                actionProbabilities[action] = p_other
-            actionProbabilities[bestAction] = p_best
-            return actionProbabilities
-
-        def max_value(state, depth, agent_index, alpha, beta, max_depth):
-            v = float('-inf')
             next_agent = (agent_index + 1) % num_agents
-            next_depth = depth + 1 if next_agent == 0 else depth
-            for action in state.getLegalActions(agent_index):
-                # timeout check
-                if time.time() - self.start_time > self.time_limit:
-                    return state.evaluate_state(state.getState())
-                successor = state.generateSuccessor(agent_index, action)
-                child_val = expectimax(successor, next_depth, max_depth, next_agent, alpha, beta)
-                v = max(v, child_val)
-                alpha = max(alpha, v)
-                if beta <= alpha:
-                    break
-            return v
+            next_depth = depth + 1 if next_agent == root_index else depth
 
-        def exp_value(state, depth, agent_index, alpha, beta, max_depth):
-            v = 0.0
-            next_agent = (agent_index + 1) % num_agents
-            next_depth = depth + 1 if next_agent == 0 else depth
-            probs = probabilityActions(state, agent_index)
-            for action in state.getLegalActions(agent_index):
-                # timeout check
-                if time.time() - self.start_time > self.time_limit:
-                    return state.evaluate_state(state.getState())
-                p = probs.get(action, 0)
-                successor = state.generateSuccessor(agent_index, action)
-                child_val = expectimax(successor, next_depth, max_depth, next_agent, alpha, beta)
-                v += p * child_val
-            return v
+            legal_actions = state.getLegalActions(agent_index)
+            if not legal_actions:
+                return self.evaluationFunction(state.getState())
 
-        def expectimax(gameState, depth, max_depth, agent_index, alpha, beta):
-            # timeout check
-            if time.time() - self.start_time > self.time_limit:
-                return gameState.evaluate_state(gameState.getState())
-            if depth >= max_depth or gameState.is_terminal():
-                return gameState.evaluate_state(gameState.getState())
-            if agent_index == 0:
-                return max_value(gameState, depth, agent_index, alpha, beta, max_depth)
-            else:
-                return exp_value(gameState, depth, agent_index, alpha, beta, max_depth)
+            if agent_index == root_index:  # MAX
+                return max(expectimax(state.generateSuccessor(agent_index, a), next_depth, next_agent)
+                           for a in legal_actions)
+            else:  # EXPECT
+                probs = self.probabilityActions(state, agent_index, legal_actions)
+                return sum(probs[a] * expectimax(state.generateSuccessor(agent_index, a),
+                                                 next_depth, next_agent) for a in legal_actions)
 
-        # Iterative deepening (por turnos completos)
-        import time as _time
-        self.start_time = _time.time()
+        best_score = float("-inf")
+        best_action = None
+        for action in gameState.getLegalActions(root_index):
+            succ = gameState.generateSuccessor(root_index, action)
+            value = expectimax(succ, 0, (root_index + 1) % num_agents)
+            if value > best_score:
+                best_score, best_action = value, action
+        return best_action
 
-        legal_actions = gameState.getLegalActions(0)
-        if not legal_actions:
-            return 'STOP'
+    def probabilityActions(self, state, agentIndex, legalActions):
+        """
+        Devuelve una distribución de probabilidad suave para las acciones del enemigo.
+        Se priorizan las acciones más cercanas a la base enemiga.
+        """
+        probs = {}
+        if not legalActions:
+            return {}
 
-        best_overall_action = legal_actions[0]
-        for current_max in range(4, (self.depth * 4) + 1, 4):
-            if _time.time() - self.start_time > self.time_limit:
-                break
-            current_best_action = None
-            current_best_score = float('-inf')
-            next_agent = (0 + 1) % num_agents
-            for action in legal_actions:
-                if _time.time() - self.start_time > self.time_limit:
-                    break
-                successor = gameState.generateSuccessor(0, action)
-                val = expectimax(successor, 0, current_max, next_agent, float('-inf'), float('inf'))
-                if val > current_best_score:
-                    current_best_score = val
-                    current_best_action = action
-            if current_best_action is not None:
-                best_overall_action = current_best_action
+        # Evita usar agentIndex como índice: usa siempre 0 inicial
+        best_action = legalActions[0]
+        best_score = float("inf")
 
-        return best_overall_action
-    
+        enemy = state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None
+        if enemy is None or not enemy.is_alive:
+            # Distribución uniforme si el tanque enemigo está muerto
+            uniform = 1.0 / len(legalActions)
+            return {a: uniform for a in legalActions}
+
+        for action in legalActions:
+            succ = state.generateSuccessor(agentIndex, action)
+            # heurística simple: distancia a base enemiga
+            base_pos = state.teamA_base if agentIndex != 0 else state.teamB_base
+            dist = state.manhattanDistance(enemy.position, base_pos)
+            if dist < best_score:
+                best_score, best_action = dist, action
+
+        # Distribución suave (acción mejor con 0.6, resto uniforme)
+        for action in legalActions:
+            probs[action] = 0.6 if action == best_action else 0.4 / (len(legalActions) - 1)
+        return probs

@@ -20,11 +20,23 @@ class Bullet:
         elif self.direction == 'RIGHT': dx = 1
         self.position = (self.position[0] + dx, self.position[1] + dy)
 
-    def getState(self):
-        """Devuelve un diccionario representando el estado de la bala."""
-        return {
-            'position': self.position,
-            'direction': self.direction,
-            'team': self.team,
-            'is_active': self.is_active
-        }
+    def getPosition(self):
+        return self.position
+    
+    def getDirection(self):
+        return self.direction
+    
+    def getTeam(self):
+        return self.team
+    
+    def getOwnerID(self):
+        return self.owner_id
+    
+    def isActive(self):
+        return self.is_active
+    
+    def getPrevPosition(self):
+        return self.prev_position
+    
+    def setActive(self, active):
+        self.is_active = active

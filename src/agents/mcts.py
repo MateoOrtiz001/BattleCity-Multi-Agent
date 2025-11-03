@@ -1,123 +1,210 @@
+# src/agents/mcts.py
 import time
-import random
 import math
+import random
+import copy
+
+from ..gameClass.enemy_scripts import ScriptedEnemyAgent
+
+class MCTSNode:
+    def __init__(self, state, parent=None, action_from_parent=None):
+        self.state = state              # objeto BattleCityState (copia)
+        self.parent = parent
+        self.action_from_parent = action_from_parent
+        self.children = {}              # action -> MCTSNode
+        self.untried_actions = None     # lista de acciones (solo del jugador en este diseño)
+        self.visits = 0
+        self.value = 0.0                # suma de recompensas (desde perspectiva del jugador)
+
+    def expand(self, action, child_state):
+        child = MCTSNode(child_state, parent=self, action_from_parent=action)
+        self.children[action] = child
+        return child
+
+    def is_fully_expanded(self):
+        return self.untried_actions is not None and len(self.untried_actions) == 0
+
+    def best_child(self, c_param=1.4):
+        # UCT over children (maximize for player)
+        best = None
+        best_score = -float("inf")
+        total_N = sum(child.visits for child in self.children.values())
+        for action, child in self.children.items():
+            if child.visits == 0:
+                score = float("inf")
+            else:
+                exploit = child.value / child.visits
+                explore = c_param * math.sqrt(math.log(max(1, total_N)) / child.visits)
+                score = exploit + explore
+            if score > best_score:
+                best_score = score
+                best = child
+        return best
 
 class MCTSAgent:
-    """Simple root-level MCTS agent using UCT for action selection.
-
-    This implementation treats the root decision (for the provided tank index)
-    and simulates all subsequent agent moves with a random rollout policy.
-    It's intentionally simple: it keeps statistics only per-root-action.
     """
-    def __init__(self, simulations=300, rollout_depth=40, time_limit=None, tankIndex=0):
-        self.simulations = int(simulations)
-        self.rollout_depth = int(rollout_depth)
-        self.time_limit = time_limit  # seconds (optional). If set, overrides simulations.
-        self.index = tankIndex
-        self.expanded = 0
+    MCTS agent that only branches at the player's decision points.
+    Simula las respuestas enemigas usando ScriptedEnemyAgent.
+    """
+    def __init__(self, num_simulations=500, rollout_depth=20, c=1.4, seed=None, scripted_enemy_type='attack_base'):
+        self.num_simulations = num_simulations
+        self.rollout_depth = rollout_depth
+        self.c = c
+        self.rng = random.Random(seed)
+        self.node_count = 0
+        self.scripted_enemy_type = scripted_enemy_type
 
-    def getAction(self, gameState):
-        """Return an action for self.index given the current BattleCityGame state.
-
-        We perform either a fixed number of simulations or run until time_limit
-        is reached. For each simulation we: select a root action by UCT,
-        then simulate random play until terminal or rollout_depth reached.
-        We record rewards (based on evaluate_state from the final state)
-        and pick the root action with highest average reward.
+    # ---------------- helper: simulate enemy turns until next player turn ----------------
+    def _simulate_enemies_until_player(self, state, scripted_enemies):
         """
-        root_state = gameState
-        legal_actions = root_state.getLegalActions(self.index)
-        if not legal_actions:
-            return 'STOP'
-        # Quick-return for single move
-        if len(legal_actions) == 1:
-            return legal_actions[0]
+        Dado un state cuyo turno es el de un enemigo (o que se encuentra después de aplicar la acción
+        del jugador), simulamos las acciones de todos los enemigos (1..num_agents-1) usando
+        scripted_enemies (lista de ScriptedEnemyAgent con índices adecuados), aplicando
+        getSuccessor para cada uno. Devuelve el nuevo estado al llegar de nuevo al turno del jugador.
+        """
+        num_agents = state.getNumAgents()
+        # Suponemos que los índices de enemigos son 1..num_agents-1
+        # Para cada enemy_index aplicamos una acción (si está vivo)
+        s = state
+        for enemy_index in range(1, num_agents):
+            legal = s.getLegalActions(enemy_index)
+            if not legal:
+                continue
+            # Usar el ScriptedEnemyAgent para decidir (si no existe, usar random)
+            try:
+                enemy_agent = scripted_enemies[enemy_index - 1]
+                act = enemy_agent.getAction(s)
+            except Exception:
+                act = self.rng.choice(legal)
+            # Si la acción no es legal por alguna razón, seleccionar aleatoria segura
+            if act not in legal:
+                act = self.rng.choice(legal)
+            # Avanzar usando getSuccessor para respetar la lógica de tu juego
+            s = s.getSuccessor(enemy_index, act)
+        return s
 
-        # Stats per action
-        stats = {a: {'visits': 0, 'value': 0.0} for a in legal_actions}
-        start_time = time.time()
-        sims = 0
-        num_tanks = len(root_state.teamA_tanks) + len(root_state.teamB_tanks)
-        team = 'A' if self.index < len(root_state.teamA_tanks) else 'B'
-
-        # UCT exploration constant
-        C = math.sqrt(2)
-
-        def select_action_ucb(total_sims):
-            # choose action maximizing UCT value
-            best = None
-            best_val = float('-inf')
-            for a, s in stats.items():
-                if s['visits'] == 0:
-                    # encourage trying unvisited actions
-                    u = float('inf')
-                else:
-                    mean = s['value'] / s['visits']
-                    u = mean + C * math.sqrt(math.log(total_sims) / s['visits'])
-                if u > best_val:
-                    best_val = u
-                    best = a
-            return best
-
-        def rollout_from(state, current_tank):
-            """Perform random rollout from given state; return final numeric reward
-            from perspective of `team` (higher is better for the root agent).
-            """
-            s = state
-            steps = 0
-            while not s.is_terminal() and steps < self.rollout_depth:
-                # get legal actions for current_tank
-                acts = s.getLegalActions(current_tank)
-                if not acts:
-                    act = 'STOP'
-                else:
-                    act = random.choice(acts)
-                s = s.generateSuccessor(current_tank, act)
-                current_tank = (current_tank + 1) % num_tanks
-                steps += 1
-            # evaluate final state from root team perspective
-            val = s.evaluate_state(s.getState(), team)
-            return val
-
-        # Run simulations
-        while True:
-            if self.time_limit is not None and (time.time() - start_time) >= self.time_limit:
+    # ---------------- rollout policy ----------------
+    def _rollout(self, state, scripted_enemies):
+        """
+        Ejecuta un rollout hasta depth o estado terminal.
+        En cada ciclo se selecciona una acción para el jugador (aleatoria con preferencia a FIRE)
+        y se simulan las respuestas enemigas con scripted_enemies.
+        """
+        s = state
+        for _ in range(self.rollout_depth):
+            if s.isWin() or s.isLose() or s.isLimitTime():
                 break
-            if self.time_limit is None and sims >= self.simulations:
+            # Jugador
+            legal_p = s.getLegalActions(0)
+            if not legal_p:
                 break
-
-            sims += 1
-            # Selection: pick root action
-            # If any action unvisited, pick one of them uniformly first
-            unvisited = [a for a, s in stats.items() if s['visits'] == 0]
-            if unvisited:
-                action = random.choice(unvisited)
+            # Prefer FIRE if available, else random (ligera preferencia)
+            if 'FIRE' in legal_p and self.rng.random() < 0.6:
+                act_p = 'FIRE'
             else:
-                action = select_action_ucb(max(1, sims))
+                act_p = self.rng.choice(legal_p)
+            s = s.getSuccessor(0, act_p)
+            # Simular enemigos hasta volver al jugador
+            s = self._simulate_enemies_until_player(s, scripted_enemies)
+        # Usamos evaluate_state como recompensa
+        return s.evaluate_state()
 
-            # Simulate: apply action at root index, then rollout
-            succ = root_state.generateSuccessor(self.index, action)
-            next_tank = (self.index + 1) % num_tanks
-            reward = rollout_from(succ, next_tank)
+    # ---------------- main function ----------------
+    def getAction(self, gameState):
+        """
+        Ejecuta MCTS y devuelve la acción (string) con mejor promedio de valor.
+        """
+        t_start = time.time()
+        self.node_count = 0
 
-            # Backpropagate to root action stats
-            stats[action]['visits'] += 1
-            stats[action]['value'] += reward
+        # Instanciar scripted enemies para rollouts/respuestas rápidas
+        num_agents = gameState.getNumAgents()
+        scripted_enemies = []
+        for i in range(1, num_agents):
+            scripted_enemies.append(ScriptedEnemyAgent(i, script_type=self.scripted_enemy_type))
 
-        # Choose action with best average value
+        # Root nodo: clonamos el estado para el árbol
+        root_state = copy.deepcopy(gameState)
+        root = MCTSNode(root_state, parent=None)
+        root.untried_actions = list(root_state.getLegalActions(0))  # acciones del jugador en la raíz
+
+        # Si no hay acciones legales, devolver None
+        if not root.untried_actions:
+            return None
+
+        for sim in range(self.num_simulations):
+            node = root
+            state = copy.deepcopy(root_state)  # arrancamos la simulación desde la raíz estado
+            # -------- Selection & Expansion (only at player nodes) --------
+            # Descendemos por el árbol mientras los nodos estén completamente expandidos
+            while True:
+                # Si llegamos a un node que no tiene acciones inicializadas, inicializarlas
+                if node.untried_actions is None:
+                    node.untried_actions = list(state.getLegalActions(0))
+                # Si hay acciones sin probar -> expandir
+                if node.untried_actions:
+                    # Expand: tomar una acción no probada del jugador
+                    action = self.rng.choice(node.untried_actions)
+                    node.untried_actions.remove(action)
+                    # Aplicar acción del jugador y luego simular respuestas enemigas
+                    next_state = state.getSuccessor(0, action)
+                    next_state = self._simulate_enemies_until_player(next_state, scripted_enemies)
+                    # crear hijo y romper selection loop
+                    # next_state ya es una copia devuelta por getSuccessor / simulación de enemigos,
+                    # evitar una copia redundante aquí para reducir el coste de deepcopying.
+                    child = node.expand(action, next_state)
+                    node = child
+                    state = next_state
+                    self.node_count += 1
+                    break
+                else:
+                    # Si node completamente expandido -> seleccionar mejor child por UCT
+                    if not node.children:
+                        # No tiene hijos (puede ocurrir si no hay acciones)
+                        break
+                    child = node.best_child(self.c)
+                    # Si best_child devolviera None (caso límite), salimos del bucle de selección
+                    if child is None:
+                        break
+                    node = child
+                    # Avanzar el estado aplicando la acción asociada
+                    state = state.getSuccessor(0, node.action_from_parent)
+                    state = self._simulate_enemies_until_player(state, scripted_enemies)
+
+            # -------- Simulation / Rollout --------
+            reward = self._rollout(state, scripted_enemies)
+
+            # -------- Backpropagation --------
+            # Actualizamos visitas/valores en la rama (desde node hacia la raíz)
+            cur = node
+            while cur is not None:
+                cur.visits += 1
+                # Nota: usamos la recompensa tal cual (desde perspectiva del jugador)
+                cur.value += reward
+                cur = cur.parent
+
+        # -------- Selección final: acción con mayor promedio --------
         best_action = None
-        best_avg = float('-inf')
-        for a, s in stats.items():
-            if s['visits'] == 0:
-                avg = float('-inf')
+        best_mean = -float("inf")
+        for act, child in root.children.items():
+            if child.visits > 0:
+                mean = child.value / child.visits
             else:
-                avg = s['value'] / s['visits']
-            if avg > best_avg:
-                best_avg = avg
-                best_action = a
+                mean = -float("inf")
+            # preferir mayor mean, en empate escoger con más visitas
+            if mean > best_mean or (mean == best_mean and child.visits > (root.children.get(best_action).visits if best_action in root.children else -1)):
+                best_mean = mean
+                best_action = act
 
-        # Fallback
+        # Si no hay hijos (posible cuando num_simulations=0), elegir acción legal aleatoria
         if best_action is None:
-            best_action = random.choice(legal_actions)
+            legal = gameState.getLegalActions(0)
+            if not legal:
+                return None
+            best_action = self.rng.choice(legal)
+
+        # imprimir estadísticas útiles
+        elapsed = time.time() - t_start
+        print(f"[MCTS] sims={self.num_simulations} time={elapsed:.3f}s node_count={self.node_count} best_action={best_action} best_mean={best_mean:.3f}")
 
         return best_action
