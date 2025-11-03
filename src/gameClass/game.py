@@ -26,8 +26,8 @@ class BattleCityState:
         self.bullets = []                   # Estado de las balas
         self.time_limit = 500               # Tiempo límite 
         self.current_time = 0               # Tiempo actual en ticks
-        self.reserves_A = 2                 # Reservas de tanques adicionales para el jugador
-        self.reserves_B = 6                 # Reservas de tanques adicionales para los enemigos
+        self.reserves_A = 1                 # Reservas de tanques adicionales para el jugador
+        self.reserves_B = 1                 # Reservas de tanques adicionales para los enemigos
         self.score = 0                      # Puntaje del juego
 
     def initialize(self, layout):
@@ -190,9 +190,6 @@ class BattleCityState:
                     continue
                         
                 actions.append(move)
-                
-        # Permitir girar la mira en cualquier momento (útil si está atascado o quiere cambiar objetivo)
-        actions.extend(['TURN_UP', 'TURN_DOWN', 'TURN_LEFT', 'TURN_RIGHT'])
 
         # Si no hay acciones de movimiento ni FIRE (aparte de TURN), al menos permitir STOP
         if not actions:
@@ -279,7 +276,7 @@ class BattleCityState:
         for enemy in self.teamB_tanks:
             if enemy.isAlive():
                 dist_enemy_base = manhattanDistance(enemy.getPos(), posBase)
-                danger_score += max(0, 10 - dist_enemy_base) * 5  # penaliza enemigos cercanos
+                danger_score += max(0, 10 - dist_enemy_base) * 2  # penaliza enemigos cercanos
 
         # --- Incentivo por atacar tanques enemigos
         attack_score = 0
@@ -288,8 +285,10 @@ class BattleCityState:
                 dist_enemy_player = manhattanDistance(enemy.getPos(), posA)
                 attack_score += 10 / (dist_enemy_player + 1)
 
+        score = self.score
+        
         # --- Penaliza tiempo y reservas enemigas
-        score = -self.reserves_B * 15 - self.current_time * 0.1
+        score = -self.reserves_B * 15
 
         # --- Suma ponderada total
         final_score = protect_score + attack_score - danger_score + score

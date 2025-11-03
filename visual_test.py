@@ -22,7 +22,7 @@ COLORS = {
     'bullet': (255, 255, 255),
 }
 
-def draw_game(screen, game_state):
+def draw_game(screen, game_state, action=None):
     screen.fill(COLORS['background'])
     size = game_state.getBoardSize()
 
@@ -57,6 +57,23 @@ def draw_game(screen, game_state):
             x, y = b.getPosition()
             pygame.draw.circle(screen, COLORS['bullet'], (x*TILE_SIZE + TILE_SIZE//2, (size-1-y)*TILE_SIZE + TILE_SIZE//2), 5)
 
+    # Mostrar overlay con acción y puntaje
+    try:
+        font = pygame.font.SysFont(None, 24)
+    except Exception:
+        pygame.font.init()
+        font = pygame.font.SysFont(None, 24)
+
+    action_text = f"Action: {action}" if action is not None else "Action: None"
+    score_val = getattr(game_state, 'score', None)
+    score_text = f"Score: {score_val}" if score_val is not None else "Score: N/A"
+
+    surf_action = font.render(action_text, True, (255, 255, 255))
+    surf_score = font.render(score_text, True, (255, 215, 0))
+    # Dibujarlos en esquina superior izquierda
+    screen.blit(surf_action, (5, 5))
+    screen.blit(surf_score, (5, 30))
+
     pygame.display.flip()
 
 def main():
@@ -69,7 +86,7 @@ def main():
     game_state.initialize(layout)
 
     # Agentes
-    agentA = MCTSAgent(num_simulations=50, rollout_depth=15, c=1.4)
+    agentA = ExpectimaxAgent(depth=12,time_limit=1.0)
     enemies = [ScriptedEnemyAgent(i+1, script_type='attack_base') for i in range(len(game_state.getTeamBTanks()))]
 
     # Ventana
@@ -97,8 +114,14 @@ def main():
 
         # Turno jugador
         actionA = agentA.getAction(game_state)
+        # Depuración: mostrar acción y posición antes/después
+        tankA = game_state.getTeamATank()
+        pos_before = tankA.getPos() if tankA else None
+        print(f"[DEBUG] Agent action: {actionA} | pos_before={pos_before}")
         if actionA:
             game_state.applyTankAction(0, actionA)
+        pos_after = tankA.getPos() if tankA else None
+        print(f"[DEBUG] pos_after={pos_after} | score={game_state.score} | time={game_state.current_time}")
 
         # Turnos enemigos
         for i, enemy_agent in enumerate(enemies, start=1):
@@ -111,8 +134,21 @@ def main():
         game_state._check_collisions()
         game_state._handle_deaths_and_respawns()
 
-        # Dibujar estado
-        draw_game(screen, game_state)
+        # Avanzar el tiempo del juego (ticks)
+        try:
+            game_state.current_time += 1
+        except Exception:
+            pass
+
+        # Actualizar el score en la partida en vivo usando la función de evaluación
+        try:
+            game_state.score = game_state.evaluate_state()
+        except Exception:
+            # Si evaluate_state falla por alguna razón, dejar el score tal cual
+            pass
+
+        # Dibujar estado (pasar la acción elegida por el agente 0)
+        draw_game(screen, game_state, action=actionA)
 
     pygame.quit()
     sys.exit()
