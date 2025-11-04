@@ -32,7 +32,9 @@ class ScriptedEnemyAgent:
         """Un script simple que intenta moverse hacia la base."""
         
         # Información del estado
-        tank = game_state.teamB_tanks[self.agent_index - 1]
+        tank = game_state.getTankByIndex(self.agent_index)
+        if tank is None or not tank.isAlive():
+            return 'STOP'
         base_pos = game_state.base.position
         tank_pos = tank.position
         current_dist = manhattanDistance(tank_pos, base_pos)
@@ -60,9 +62,11 @@ class ScriptedEnemyAgent:
                 move_actions.append(action)
 
         # 2. Decidir si disparar (con un poco de aleatoriedad)
-        # Por ejemplo, 20% de probabilidad de disparar si es legal
-        if 'FIRE' in legal_actions and random.random() < 0.6:
-            return 'FIRE'
+        # Las acciones FIRE vienen con dirección, p. ej. 'FIRE_UP'.
+        # Buscar todas las acciones de tipo FIRE y elegir una al azar/según probabilidad.
+        fire_actions = [a for a in legal_actions if isinstance(a, str) and a.startswith('FIRE')]
+        if fire_actions and random.random() < 0.6:
+            return random.choice(fire_actions)
         
         # 3. Si el mejor movimiento es STOP (atascado), elige uno al azar
         if best_move == 'STOP' and move_actions:

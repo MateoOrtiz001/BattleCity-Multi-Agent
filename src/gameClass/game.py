@@ -27,7 +27,7 @@ class BattleCityState:
         self.time_limit = 500               # Tiempo límite 
         self.current_time = 0               # Tiempo actual en ticks
         self.reserves_A = 1                 # Reservas de tanques adicionales para el jugador
-        self.reserves_B = 1                 # Reservas de tanques adicionales para los enemigos
+        self.reserves_B = 0                 # Reservas de tanques adicionales para los enemigos
         self.score = 0                      # Puntaje del juego
 
     def initialize(self, layout):
@@ -116,45 +116,67 @@ class BattleCityState:
         if self.isWin() or self.isLose():
             return actions
         
-        # Seleccionamos el tanque correspondiente
-        tank = None
-        if tankIndex == 0:
-            tank = self.teamA_tank
-        else:
-            tank = self.teamB_tanks[tankIndex - 1]
-        
-        # Verificamos que el tanque esté vivo, no lo está, simplemente es como si no hiciera nada
-        if not tank or not tank.isAlive():
+        # Seleccionamos el tanque correspondiente de forma robusta
+        # Usa getTankByIndex para soportar cambios dinámicos en el número de tanques
+        tank = self.getTankByIndex(tankIndex)
+
+        # Verificamos que el tanque exista y esté vivo; si no, no hay acciones
+        if tank is None or not tank.isAlive():
             return actions
             
         # Solo agregamos FIRE si hay una base enemiga o tanque enemigo en la dirección actual
         x, y = tank.position
         
         # Buscar objetivo valioso en la dirección actual
-        if tank.direction:
-            dx, dy = {'UP': (0, 1), 'DOWN': (0, -1), 'LEFT': (-1, 0), 'RIGHT': (1, 0)}[tank.direction]
-            test_pos = (x + dx, y + dy)
-            
-            # Verificar si hay línea directa objetos disparables
-            while 0 <= test_pos[0] < self.board_size and 0 <= test_pos[1] < self.board_size:
-                # Tanque enemigo
-                for other_tank in [self.teamA_tank] + self.teamB_tanks:
-                    if other_tank.isAlive() and other_tank.getTeam() != tank.getTeam() and other_tank.getPos() == test_pos:
-                        actions.append('FIRE')
-                        break
-                
-                # Verificar muros
-                blocked = False
+        dirs = {'UP': (0,1), 'DOWN': (0,-1), 'LEFT': (-1,0), 'RIGHT': (1,0)}
+        for d, (dx, dy) in dirs.items():
+            tx, ty = x + dx, y + dy
+            wall_count = 0
+            blocked = False
+            while 0 <= tx < self.board_size and 0 <= ty < self.board_size:
+                # Primero comprobar muros en la casilla actual
+                wall_here = None
                 for wall in self.walls:
-                    if not wall.isDestroyed() and wall.getPosition() == test_pos:
-                        if wall.getType() == 'brick':  # Si es un muro de ladrillo, es un objetivo válido
-                            actions.append('FIRE')
+                    if not wall.isDestroyed() and wall.getPosition() == (tx, ty):
+                        wall_here = wall
+                        break
+
+                if wall_here:
+                    # Si es steel, bloquea la línea de fuego completamente
+                    if wall_here.getType() == 'steel':
+                        # Para tanques no-jugadores, se permitía disparar a un muro brick; mantener ese comportamiento
+                        # (pero steel no es disparable).
                         blocked = True
                         break
-                if blocked:
+                    else:
+                        # brick: contar cuántos ladrillos hay en el camino
+                        wall_count += 1
+                        if tankIndex != 0:
+                            # permitir que agentes no-jugador consideren disparar a muros de ladrillo adyacentes
+                            actions.append(f'FIRE_{d}')
+                        # Si ya hay más de una pared entre el tanque y un objetivo, dejamos de considerar esta dirección
+                        if wall_count > 1:
+                            blocked = True
+                            break
+                        # continuar escaneando más allá del ladrillo (la bala puede destruirlo)
+                        tx += dx; ty += dy
+                        continue
+
+                # Si no hay muro, comprobar si hay un tanque enemigo en esta celda
+                found_enemy = False
+                for other_tank in [self.teamA_tank] + self.teamB_tanks:
+                    if other_tank is None:
+                        continue
+                    if other_tank.isAlive() and other_tank.getTeam() != tank.getTeam() and other_tank.getPos() == (tx, ty):
+                        # Solo permitir FIRE si hay a lo sumo una pared entre el origen y el objetivo
+                        if wall_count <= 1:
+                            actions.append(f'FIRE_{d}')
+                        found_enemy = True
+                        break
+                if found_enemy:
                     break
-                    
-                test_pos = (test_pos[0] + dx, test_pos[1] + dy)
+
+                tx += dx; ty += dy
         
         # Añadir movimientos posibles (si no hay obstáculos)
         x, y = tank.getPos()
@@ -220,13 +242,20 @@ class BattleCityState:
         
         state.applyTankAction(tankIndex, action)
         
-        if tankIndex == 0:
-            state.score -= TIME_PENALTY
+        # NOTE: moved time penalty handling into evaluate_state to centralize scoring.
+        # Previously the penalty was applied here for tankIndex==0 which caused
+        # inconsistencies between live execution (applyTankAction) and search
+        # (getSuccessor). evaluate_state now subtracts a time-based penalty.
         
         if tankIndex == state.getNumAgents() - 1:
             state.moveBullets()
             state._check_collisions()
             state._handle_deaths_and_respawns()
+            # Avanzar el tiempo del juego por cada ciclo completo de agentes
+            try:
+                state.current_time += 1
+            except Exception:
+                pass
         
         return state
     
@@ -259,40 +288,138 @@ class BattleCityState:
         return score
 """
     def evaluate_state(self):
+        """
+        Función de evaluación mejorada para BattleCity.
+        
+        Estrategia:
+        - Identificar qué enemigo es la mayor amenaza (cercano a la base)
+        - Priorizar atacar a ese enemigo
+        - Mantener defensa pero ser activo en ataque
+        - Escalar agresión cuando hay pocos enemigos
+        """
+        
         if self.isWin():
             return float('inf')
         elif self.isLose():
             return float('-inf')
-
+        
         posA = self.teamA_tank.getPos()
         posBase = self.base.getPosition()
-
-        # --- Distancia del jugador a la base (debe protegerla)
-        distA2Base = manhattanDistance(posA, posBase)
-        protect_score = max(0, 15 - distA2Base) * 3  # recompensa por estar cerca de la base
-
-        # --- Penalización por enemigos cercanos a la base
-        danger_score = 0
-        for enemy in self.teamB_tanks:
-            if enemy.isAlive():
-                dist_enemy_base = manhattanDistance(enemy.getPos(), posBase)
-                danger_score += max(0, 10 - dist_enemy_base) * 2  # penaliza enemigos cercanos
-
-        # --- Incentivo por atacar tanques enemigos
-        attack_score = 0
-        for enemy in self.teamB_tanks:
-            if enemy.isAlive():
-                dist_enemy_player = manhattanDistance(enemy.getPos(), posA)
-                attack_score += 10 / (dist_enemy_player + 1)
-
-        score = self.score
         
-        # --- Penaliza tiempo y reservas enemigas
-        score = -self.reserves_B * 15
+        # ===== CÁLCULO DE AMENAZA: IDENTIFICAR ENEMIGO PRIORITARIO =====
+        
+        alive_enemies = [e for e in self.teamB_tanks if e.isAlive()]
+        num_alive = len(alive_enemies)
+        
+        if num_alive == 0:
+            # No hay enemigos vivos pero hay reservas
+            return 100 - TIME_PENALTY * self.current_time
+        
+        # Encontrar el enemigo más peligroso (el más cercano a la base)
+        threat_enemy = None
+        min_threat_dist = float('inf')
+        
+        for enemy in alive_enemies:
+            dist_to_base = manhattanDistance(enemy.getPos(), posBase)
+            if dist_to_base < min_threat_dist:
+                min_threat_dist = dist_to_base
+                threat_enemy = enemy
+        
+        # ===== DEFENSA: PROTEGER LA BASE =====
+        
+        dist_player_to_base = manhattanDistance(posA, posBase)
+        
+        # Bonus por estar cerca de la base, pero con saturación (no infinito si está muy lejos)
+        defend_score = 0
+        if min_threat_dist < 8:  # Si hay enemigos cerca de la base
+            # Aumentar urgencia defensiva
+            defend_score = max(0, 20 - dist_player_to_base) * 3
+        else:
+            # Si no hay amenaza inmediata, recompensa más moderada
+            defend_score = max(0, 15 - dist_player_to_base) * 1.5
+        
+        # Penalización por enemigos cercanos a la base
+        danger_score = 0
+        for enemy in alive_enemies:
+            dist_enemy_to_base = manhattanDistance(enemy.getPos(), posBase)
+            if dist_enemy_to_base < 10:
+                danger_score += (10 - dist_enemy_to_base) ** 2  # Penalización cuadrática
+        
+        # ===== ATAQUE: PRIORIDAD ESTRATÉGICA =====
+        
+        attack_score = 0
+        
+        if threat_enemy is not None:
+            dist_to_threat = manhattanDistance(posA, threat_enemy.getPos())
+            
+            # Recompensa agresiva por estar cerca del enemigo prioritario
+            attack_score += 40 / (dist_to_threat + 1)
+            
+            # Bonus extra si el enemigo prioritario está amenazando la base
+            if min_threat_dist < 5:
+                attack_score += 50 / (dist_to_threat + 1)
+        
+        # Atacar enemigos secundarios cuando el principal está lejos
+        for enemy in alive_enemies:
+            if enemy != threat_enemy:
+                dist_to_enemy = manhattanDistance(posA, enemy.getPos())
+                # Menor prioridad, pero contribuye al score
+                attack_score += 10 / (dist_to_enemy + 1)
+        
+        # ===== ESCALADA AGRESIVA: POCOS ENEMIGOS =====
+        
+        aggression_bonus = 0
+        if num_alive == 1:
+            # Solo queda un enemigo: ser MUY agresivo, menos defensa
+            remaining_enemy = alive_enemies[0]
+            dist_to_last = manhattanDistance(posA, remaining_enemy.getPos())
+            # Reducimos la agresividad extrema para evitar que el agente "se obsesione"
+            # con posiciones lejanas o camping para maximizar esta bonificación.
+            aggression_bonus = 30 / (dist_to_last + 1)  # más moderado
+        elif num_alive == 2 and self.reserves_B == 0:
+            # Dos enemigos sin reservas: ser agresivo
+            aggression_bonus = 30
+        
+        # ===== PENALIZACIONES Y BONIFICACIONES GENERALES =====
+        
+        # Penalización por reservas enemigas (quieren aparecer más enemigos)
+        reserves_penalty = self.reserves_B * 20
+        
+        # Bonificación por eliminar reservas (menos enemigos futuros)
+        kill_bonus = 0
+        # Si empezamos con 1 reserva y ahora es 0, tuvimos éxito
+        if self.reserves_B == 0:
+            kill_bonus = 50
+        
+        # Penalización suave por tiempo (preferir victorias rápidas)
+        time_penalty = TIME_PENALTY * self.current_time * 5
+        
+        # ===== CÁLCULO FINAL =====
+        
+        # Mobility bonus: preferir posiciones con más opciones de movimiento
+        # Esto desincentiva quedarse 'acamapado' en un solo pasillo.
+        try:
+            legal_for_player = self.getLegalActions(0)
+            mobility = sum(1 for a in legal_for_player if isinstance(a, str) and a.startswith('MOVE_'))
+        except Exception:
+            mobility = 0
 
-        # --- Suma ponderada total
-        final_score = protect_score + attack_score - danger_score + score
+        final_score = (
+            defend_score           # Proteger base
+            + attack_score         # Atacar enemigos, con prioridad estratégica
+            + aggression_bonus     # Escalar cuando es óptimo
+            - danger_score         # Penalizar enemigos cercanos a base
+            - reserves_penalty     # Penalizar futuras apariciones
+            + kill_bonus           # Bonus por matar enemigos/eliminar reservas
+            - time_penalty         # Preferir victorias rápidas
+        )
+
+        # Añadir movilidad con peso pequeño
+        final_score += 2 * mobility
+        
         return final_score
+
+
 
     def getTankByIndex(self, agentIndex):
         """
@@ -330,73 +457,72 @@ class BattleCityState:
         tank = self.getTankByIndex(tankIndex)
         if tank is None or not tank.is_alive:
             return
+        
+        
         x,y = tank.getPos()
         # movimiento / giro
-        if action == 'MOVE_UP':
-            tank.direction = 'UP'
-            tank.move((x, y + 1))
-        elif action == 'MOVE_DOWN':
-            tank.direction = 'DOWN'
-            tank.move((x, y - 1))
-        elif action == 'MOVE_LEFT':
+        if action == 'MOVE_LEFT':
             tank.direction = 'LEFT'
             tank.move((x - 1, y))
         elif action == 'MOVE_RIGHT':
             tank.direction = 'RIGHT'
             tank.move((x + 1, y))
-        elif action == 'TURN_UP':
+        elif action == 'MOVE_UP':
             tank.direction = 'UP'
-        elif action == 'TURN_DOWN':
+            tank.move((x, y + 1))
+        elif action == 'MOVE_DOWN':
             tank.direction = 'DOWN'
-        elif action == 'TURN_LEFT':
-            tank.direction = 'LEFT'
-        elif action == 'TURN_RIGHT':
-            tank.direction = 'RIGHT'
-        elif action == 'FIRE':
+            tank.move((x, y - 1))
+        elif action.startswith('FIRE_'):
+            direction = action.split('_')[1]
             # crear bala en la casilla adyacente (manteniendo tu chequeo original)
-            if tank.getDirection():
-                dx, dy = {'UP': (0, 1), 'DOWN': (0, -1), 'LEFT': (-1, 0), 'RIGHT': (1, 0)}[tank.getDirection()]
-                bullet_pos = (x + dx, y + dy)
-                if 0 <= bullet_pos[0] < self.board_size and 0 <= bullet_pos[1] < self.board_size:
-                    # comprueba colisiones inmediatas (igual que en generateSuccessor)
-                    collided = False
-                    for wall in self.walls:
-                        if not wall.isDestroyed() and wall.getPosition() == bullet_pos:
-                            if hasattr(wall, 'takeDamage'):
-                                wall.takeDamage(1)
-                            else:
-                                try:
-                                    wall.destroy()
-                                except Exception:
-                                    pass
-                            collided = True
-                            break
-                    if not collided:
-                        all_tanks_next = [self.teamA_tank] + self.teamB_tanks
-                        for other_tank in all_tanks_next:
-                            if other_tank and other_tank.isAlive() and other_tank.getTeam() != tank.getTeam() and other_tank.getPos() == bullet_pos:
-                                if hasattr(other_tank, 'takeDamage'):
-                                    other_tank.takeDamage(1)
-                                else:
-                                    try:
-                                        other_tank.destroy()
-                                    except Exception:
-                                        other_tank.is_alive = False
-                                collided = True
-                                break
-                    if not collided and self.base and (not self.base.isDestroyed()) and self.base.getPosition() == bullet_pos:
-                        if hasattr(self.base, 'takeDamage'):
-                            self.base.takeDamage()
+            dx, dy = {'UP': (0, 1), 'DOWN': (0, -1), 'LEFT': (-1, 0), 'RIGHT': (1, 0)}[direction]
+            bullet_pos = (x + dx, y + dy)
+            if 0 <= bullet_pos[0] < self.board_size and 0 <= bullet_pos[1] < self.board_size:
+                # comprueba colisiones inmediatas (igual que en generateSuccessor)
+                collided = False
+                for wall in self.walls:
+                    if not wall.isDestroyed() and wall.getPosition() == bullet_pos:
+                        if hasattr(wall, 'takeDamage'):
+                            wall.takeDamage(1)
                         else:
                             try:
-                                self.base.is_destroyed = True
+                               wall.destroy()
                             except Exception:
                                 pass
                         collided = True
+                        break
+                if not collided:
+                    all_tanks_next = [self.teamA_tank] + self.teamB_tanks
+                    for other_tank in all_tanks_next:
+                        if other_tank and other_tank.isAlive() and other_tank.getTeam() != tank.getTeam() and other_tank.getPos() == bullet_pos:
+                            if hasattr(other_tank, 'takeDamage'):
+                               other_tank.takeDamage(1)
+                            else:
+                                try:
+                                    other_tank.destroy()
+                                except Exception:
+                                    other_tank.is_alive = False
+                            collided = True
+                            break
+                if not collided and self.base and (not self.base.isDestroyed()) and self.base.getPosition() == bullet_pos:
+                    if hasattr(self.base, 'takeDamage'):
+                            self.base.takeDamage()
+                    else:
+                        try:
+                            self.base.is_destroyed = True
+                        except Exception:
+                            pass
+                    collided = True
 
-                    if not collided:
-                        new_bullet = Bullet(position=bullet_pos, direction=tank.getDirection(), team=tank.getTeam(), owner_id=tankIndex)
-                        self.bullets.append(new_bullet)
+                if not collided:
+                    # Asegurar que la bala use la dirección indicada por la acción
+                    try:
+                        tank.direction = direction
+                    except Exception:
+                        pass
+                    new_bullet = Bullet(position=bullet_pos, direction=direction, team=tank.getTeam(), owner_id=tankIndex)
+                    self.bullets.append(new_bullet)
         elif action == 'STOP':
             pass
 

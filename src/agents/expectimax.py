@@ -31,7 +31,11 @@ class ExpectimaxAgent:
             if depth >= max_depth or self.is_time_exceeded() or state.isWin() or state.isLose() or state.isLimitTime():
                 return state.evaluate_state()
 
-            next_agent = (agent_index + 1) % num_agents
+            # Use the current number of agents in 'state' (puede cambiar dinámicamente)
+            curr_num_agents = state.getNumAgents()
+            if curr_num_agents <= 0:
+                return state.evaluate_state()
+            next_agent = (agent_index + 1) % curr_num_agents
             next_depth = depth + 1
             legal_actions = state.getLegalActions(agent_index)
             if not legal_actions:
@@ -97,7 +101,8 @@ class ExpectimaxAgent:
         best_action = legalActions[0]
         best_score = float("inf")
 
-        enemy = state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None
+        # Obtener el tanque correspondiente de forma segura
+        enemy = state.getTankByIndex(agentIndex) if hasattr(state, 'getTankByIndex') else (state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None)
         if enemy is None or not enemy.isAlive():
             # Distribución uniforme si el tanque enemigo está muerto
             uniform = 1.0 / len(legalActions)

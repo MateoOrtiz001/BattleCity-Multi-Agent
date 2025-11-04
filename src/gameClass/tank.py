@@ -1,4 +1,4 @@
-
+from .bullet import Bullet
 class Tank():
     """Clase que representa un tanque en el juego Battle City."""
     def __init__(self, position, team):
@@ -54,3 +54,4 @@ class Tank():
         self.health = 3
         self.is_alive = True
         self.respawn_timer = 0.0
+        

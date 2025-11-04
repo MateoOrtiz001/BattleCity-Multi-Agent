@@ -86,7 +86,7 @@ def main():
     game_state.initialize(layout)
 
     # Agentes
-    agentA = ExpectimaxAgent(depth=12,time_limit=1.0)
+    agentA = ExpectimaxAgent(depth=3,time_limit=0.50)
     enemies = [ScriptedEnemyAgent(i+1, script_type='attack_base') for i in range(len(game_state.getTeamBTanks()))]
 
     # Ventana
