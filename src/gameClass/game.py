@@ -10,6 +10,8 @@ from .walls import Wall
 from .base import Base
 
 TIME_PENALTY = 1
+# Penalización por distancia a la base para incentivar la defensa (ajustable)
+BASE_DISTANCE_PENALTY = 4
 
 class BattleCityState:
     """Clase que representa el estado del juego Battle City.
@@ -100,6 +102,15 @@ class BattleCityState:
     def isLimitTime(self):
         """Verifica si el juego terminó."""
         return self.current_time >= self.time_limit
+
+    def is_terminal(self):
+        """Compatibilidad: devuelve True si el juego terminó por victoria/derrota/tiempo."""
+        return self.isWin() or self.isLose() or self.isLimitTime()
+
+    # Alias con estilo distinto (algunos módulos usan isTerminal())
+    def isTerminal(self):
+        return self.is_terminal()
+    
     
     def isWin(self):
         """Verifica si el equipo A ganó. (El equipo B se queda sin reservas y ni tanques en el escenario)"""
@@ -190,6 +201,7 @@ class BattleCityState:
         # Verificar cada movimiento posible
         for move, new_pos in possible_moves.items():
             if 0 <= new_pos[0] < self.board_size and 0 <= new_pos[1] < self.board_size:  # Dentro del tablero
+                
                 can_move = True
                 # Colisión con muros
                 for wall in self.walls:
@@ -210,7 +222,8 @@ class BattleCityState:
                 # Colisión con base
                 if not self.base.isDestroyed() and self.base.getPosition() == new_pos:
                     continue
-                        
+                #print(f"[DEBUG] Testing move {move}: ({new_pos[0]},{new_pos[1]}) -> can_move={can_move}")
+
                 actions.append(move)
 
         # Si no hay acciones de movimiento ni FIRE (aparte de TURN), al menos permitir STOP
@@ -258,6 +271,15 @@ class BattleCityState:
                 pass
         
         return state
+
+    # Compatibility wrapper: some modules call `generateSuccessor` instead of `getSuccessor`.
+    # We provide a thin alias so both names work the same way.
+    def generateSuccessor(self, tankIndex, action):
+        """Alias for getSuccessor to preserve compatibility with older modules.
+
+        Returns a new BattleCityState with the action applied (deep-copied).
+        """
+        return self.getSuccessor(tankIndex, action)
     
     """def evaluate_state(self):
         Función de evaluación mejorada con énfasis en defensa activa
@@ -307,7 +329,7 @@ class BattleCityState:
         posBase = self.base.getPosition()
         
         # ===== CÁLCULO DE AMENAZA: IDENTIFICAR ENEMIGO PRIORITARIO =====
-        
+
         alive_enemies = [e for e in self.teamB_tanks if e.isAlive()]
         num_alive = len(alive_enemies)
         
@@ -416,7 +438,11 @@ class BattleCityState:
 
         # Añadir movilidad con peso pequeño
         final_score += 2 * mobility
-        
+        # Penalizar estar lejos de la base (incentivar defensa)
+        try:
+            final_score -= BASE_DISTANCE_PENALTY * dist_player_to_base
+        except Exception:
+            pass
         return final_score
 
 

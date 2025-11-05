@@ -3,11 +3,12 @@ import time
 import random
 
 class ExpectimaxAgent:
-    def __init__(self, depth=2, time_limit=None):
+    def __init__(self, depth=2, time_limit=None, debug=False):
         self.depth = depth
         self.time_limit = time_limit
         self.start_time = None
         self.node_count = 0   # <--- NUEVO
+        self.debug = debug
 
     def is_time_exceeded(self):
         return (
@@ -18,10 +19,10 @@ class ExpectimaxAgent:
     def getAction(self, gameState):
         self.start_time = time.time()
         self.node_count = 0  # <--- Reiniciar contador en cada decisión
-
         num_agents = gameState.getNumAgents()
         best_overall_score = float("-inf")
         best_overall_action = None
+        root_index = getattr(self, 'index', 0)
 
         def expectimax(state, depth, max_depth, agent_index):
             # --- Contamos cada expansión ---
@@ -36,8 +37,10 @@ class ExpectimaxAgent:
             if curr_num_agents <= 0:
                 return state.evaluate_state()
             next_agent = (agent_index + 1) % curr_num_agents
-            next_depth = depth + 1
+            # Increment depth only when we cycle back to the root agent
+            next_depth = depth + 1 if next_agent == root_index else depth
             legal_actions = state.getLegalActions(agent_index)
+            #print(f"[DEBUG] Acciones legales disponibles: {legal_actions}, para agente={agent_index} en profundidad={depth}")
             if not legal_actions:
                 return state.evaluate_state()
 
@@ -63,18 +66,26 @@ class ExpectimaxAgent:
                 return total
 
         # --- Iterative deepening ---
-        for current_max in range(3, (self.depth * 3) + 1, 3):
-            if self.is_time_exceeded():
+        # step by number of agents to make `self.depth` mean "turnos completos"
+        step = num_agents if num_agents > 0 else 1
+        for current_max in range(step, (self.depth * step) + 1, step):
+            if self.is_time_exceeded() or current_max > self.depth:
                 break
 
             current_best_action = None
             current_best_score = float("-inf")
 
-            for action in gameState.getLegalActions(0):
+            for action in gameState.getLegalActions(root_index):
                 if self.is_time_exceeded():
                     break
-                successor = gameState.getSuccessor(0, action)
-                val = expectimax(successor, 0, current_max, 0)
+                successor = gameState.getSuccessor(root_index, action)
+                val = expectimax(successor, 0, current_max, (root_index + 1) % num_agents)
+                if self.debug:
+                    try:
+                        ev = successor.evaluate_state()
+                    except Exception:
+                        ev = None
+                    print(f"[DEBUG][IDS {current_max}] action={action} -> expectimax={val} eval(successor)={ev}")
                 if val > current_best_score:
                     current_best_score = val
                     current_best_action = action
@@ -84,7 +95,15 @@ class ExpectimaxAgent:
                 best_overall_score = current_best_score
 
             # --- Mostrar progreso por iteración ---
-            print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+            if self.debug:
+                print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+            else:
+                # mostrar progreso ligero si no está silenciado
+                try:
+                    if not getattr(self, 'suppress_output', False):
+                        print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+                except Exception:
+                    print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
 
         return best_overall_action
 
@@ -102,23 +121,59 @@ class ExpectimaxAgent:
         best_score = float("inf")
 
         # Obtener el tanque correspondiente de forma segura
-        enemy = state.getTankByIndex(agentIndex) if hasattr(state, 'getTankByIndex') else (state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None)
-        if enemy is None or not enemy.isAlive():
+        enemy = None
+        try:
+            enemy = state.getTankByIndex(agentIndex)
+        except Exception:
+            try:
+                enemy = state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None
+            except Exception:
+                enemy = None
+
+        if enemy is None or not getattr(enemy, 'isAlive', lambda: False)():
             # Distribución uniforme si el tanque enemigo está muerto
             uniform = 1.0 / len(legalActions)
             return {a: uniform for a in legalActions}
 
         for action in legalActions:
-            succ = state.getSuccessor(agentIndex, action)
-            # heurística simple: distancia a base enemiga
-            base_pos = succ.getBase().getPosition() if agentIndex != 0 else state.getTeamBBase().getPosition()
-            dist = manhattanDistance(enemy.getPos(), base_pos)
+            # evaluar la posición del enemigo tras realizar la acción
+            try:
+                succ = state.getSuccessor(agentIndex, action)
+                succ_enemy = None
+                try:
+                    succ_enemy = succ.getTankByIndex(agentIndex)
+                except Exception:
+                    # fallback: buscar en estructuras internas
+                    if hasattr(succ, 'teamB_tanks') and agentIndex > 0:
+                        succ_enemy = succ.teamB_tanks[agentIndex - 1] if len(succ.teamB_tanks) >= agentIndex else None
+                if succ_enemy is None:
+                    # si no podemos obtener el tanque sucesor, usar la posición actual
+                    enemy_pos = getattr(enemy, 'getPos', lambda: getattr(enemy, 'position', None))()
+                else:
+                    enemy_pos = getattr(succ_enemy, 'getPos', lambda: getattr(succ_enemy, 'position', None))()
+                base_pos = succ.getBase().getPosition() if hasattr(succ, 'getBase') else succ.getBase().getPosition()
+                dist = manhattanDistance(enemy_pos, base_pos)
+            except Exception:
+                # en caso de fallo de la simulación, usar la posición actual del enemy
+                try:
+                    base_pos = state.getBase().getPosition()
+                except Exception:
+                    base_pos = None
+                enemy_pos = getattr(enemy, 'getPos', lambda: getattr(enemy, 'position', None))()
+                if base_pos is None or enemy_pos is None:
+                    dist = float('inf')
+                else:
+                    dist = manhattanDistance(enemy_pos, base_pos)
+
             if dist < best_score:
                 best_score, best_action = dist, action
 
         # Distribución suave (acción mejor con 0.6, resto uniforme)
         for action in legalActions:
-            probs[action] = 0.8 if action == best_action else 0.2 / (len(legalActions) - 1)
+            if len(legalActions) == 1:
+                probs[action] = 1.0
+            else:
+                probs[action] = 0.6 if action == best_action else 0.4 / (len(legalActions) - 1)
         return probs
 
 class ExpectimaxAlphaBetaAgent:
