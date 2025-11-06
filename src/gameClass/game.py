@@ -11,7 +11,7 @@ from .base import Base
 
 TIME_PENALTY = 1
 # Penalización por distancia a la base para incentivar la defensa (ajustable)
-BASE_DISTANCE_PENALTY = 4
+BASE_DISTANCE_PENALTY = 0
 
 class BattleCityState:
     """Clase que representa el estado del juego Battle City.
@@ -105,12 +105,7 @@ class BattleCityState:
 
     def is_terminal(self):
         """Compatibilidad: devuelve True si el juego terminó por victoria/derrota/tiempo."""
-        return self.isWin() or self.isLose() or self.isLimitTime()
-
-    # Alias con estilo distinto (algunos módulos usan isTerminal())
-    def isTerminal(self):
-        return self.is_terminal()
-    
+        return self.isWin() or self.isLose() or self.isLimitTime()    
     
     def isWin(self):
         """Verifica si el equipo A ganó. (El equipo B se queda sin reservas y ni tanques en el escenario)"""
@@ -246,7 +241,20 @@ class BattleCityState:
         if self.isWin() or self.isLose():
             raise Exception("El juego ya terminó")  # Si el juego ya terminó, no generar sucesores
 
-        state = copy.deepcopy(self) #BattleCityState(self)
+        state = BattleCityState()
+        state.board_size = self.board_size
+        state.time_limit = self.time_limit
+        state.reserves_A = self.reserves_A
+        state.reserves_B = self.reserves_B
+        state.current_time = self.current_time
+        state.score = self.score
+        
+        # Copiar SOLO los objetos que pueden cambiar
+        state.teamA_tank = self._copy_tank(self.teamA_tank)
+        state.teamB_tanks = [self._copy_tank(t) for t in self.teamB_tanks]
+        state.base = self._copy_base(self.base)
+        state.walls = self.walls  # Nota: NO copiar, las paredes cambian raramente
+        state.bullets = [self._copy_bullet(b) for b in self.bullets]
         legalActions = state.getLegalActions(tankIndex)
         
         if action not in legalActions:
@@ -271,15 +279,6 @@ class BattleCityState:
                 pass
         
         return state
-
-    # Compatibility wrapper: some modules call `generateSuccessor` instead of `getSuccessor`.
-    # We provide a thin alias so both names work the same way.
-    def generateSuccessor(self, tankIndex, action):
-        """Alias for getSuccessor to preserve compatibility with older modules.
-
-        Returns a new BattleCityState with the action applied (deep-copied).
-        """
-        return self.getSuccessor(tankIndex, action)
     
     """def evaluate_state(self):
         Función de evaluación mejorada con énfasis en defensa activa
@@ -569,6 +568,34 @@ class BattleCityState:
                     return False
             return True
         return False
+
+    def _copy_tank(self, tank):
+        """Copia solo los atributos que importan."""
+        new_tank = Tank.__new__(Tank)
+        new_tank.position = tank.position
+        new_tank.direction = tank.direction
+        new_tank.health = tank.health
+        new_tank.is_alive = tank.is_alive
+        new_tank.team = tank.team
+        new_tank.spawn_position = tank.spawn_position
+        return new_tank
+    
+    def _copy_bullet(self, bullet):
+        """Copia solo los atributos que importan."""
+        new_bullet = Bullet.__new__(Bullet)
+        new_bullet.position = bullet.position
+        new_bullet.direction = bullet.direction
+        new_bullet.team = bullet.team
+        new_bullet.is_active = bullet.is_active
+        new_bullet.owner_id = bullet.owner_id
+        return new_bullet
+    
+    def _copy_base(self, base):
+        """Copia solo los atributos que importan."""
+        new_base = Base.__new__(Base)
+        new_base.position = base.position
+        new_base.is_destroyed = base.is_destroyed
+        return new_base
 
 
     def _check_collisions(self):

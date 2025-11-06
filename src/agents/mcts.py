@@ -123,8 +123,11 @@ class MCTSAgent:
         for i in range(1, num_agents):
             scripted_enemies.append(ScriptedEnemyAgent(i, script_type=self.scripted_enemy_type))
 
-        # Root nodo: clonamos el estado para el árbol
-        root_state = copy.deepcopy(gameState)
+        # Root nodo: clonamos el estado para el árbol (usar copia rápida si está disponible)
+        try:
+            root_state = gameState.fast_copy()
+        except Exception:
+            root_state = copy.deepcopy(gameState)
         root = MCTSNode(root_state, parent=None)
         root.untried_actions = list(root_state.getLegalActions(0))  # acciones del jugador en la raíz
 
@@ -134,7 +137,11 @@ class MCTSAgent:
 
         for sim in range(self.num_simulations):
             node = root
-            state = copy.deepcopy(root_state)  # arrancamos la simulación desde la raíz estado
+            # arrancamos la simulación desde la raíz estado (usar fast_copy si disponible)
+            try:
+                state = root_state.fast_copy()
+            except Exception:
+                state = copy.deepcopy(root_state)
             # -------- Selection & Expansion (only at player nodes) --------
             # Descendemos por el árbol mientras los nodos estén completamente expandidos
             while True:

@@ -30,6 +30,7 @@ import sys
 import inspect
 import heapq
 import random
+import numba
 import io
 
 
@@ -233,9 +234,24 @@ class PriorityQueueWithFunction(PriorityQueue):
         PriorityQueue.push(self, item, self.priorityFunction(item))
 
 
-def manhattanDistance(xy1, xy2):
-    "Returns the Manhattan distance between points xy1 and xy2"
-    return abs(xy1[0] - xy2[0]) + abs(xy1[1] - xy2[1])
+# Manhattan distance: provide an optional numba-accelerated version when available.
+try:
+    from numba import njit
+    @njit
+    def _manhattan_numba(xy1, xy2):
+        return abs(xy1[0] - xy2[0]) + abs(xy1[1] - xy2[1])
+
+    def manhattanDistance(xy1, xy2):
+        try:
+            # numba njit function accepts array-like inputs; convert tuples to a small list
+            return int(_manhattan_numba((xy1[0], xy1[1]), (xy2[0], xy2[1])))
+        except Exception:
+            # Fallback to pure python if numba call fails for given types
+            return abs(xy1[0] - xy2[0]) + abs(xy1[1] - xy2[1])
+except Exception:
+    def manhattanDistance(xy1, xy2):
+        "Returns the Manhattan distance between points xy1 and xy2"
+        return abs(xy1[0] - xy2[0]) + abs(xy1[1] - xy2[1])
 
 
 """
