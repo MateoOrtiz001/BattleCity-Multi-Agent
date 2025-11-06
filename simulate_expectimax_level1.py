@@ -67,26 +67,6 @@ class GameAdapter:
         # Exponer el estado "crudo" cuando sea necesario
         return self._state
 
-    def evaluate_state(self, arg=None):
-        """
-        Compatibilidad: algunos agentes llaman a evaluate_state(state.getState())
-        mientras que otros llaman a evaluate_state() directamente sobre el wrapper.
-        Esta función acepta ambas variantes y delega al estado subyacente.
-        """
-        if arg is None:
-            return self._state.evaluate_state()
-        # Si le pasaron un objeto que tiene evaluate_state, intentar llamarlo
-        if hasattr(arg, 'evaluate_state'):
-            try:
-                return arg.evaluate_state()
-            except TypeError:
-                try:
-                    return arg.evaluate_state(arg)
-                except Exception:
-                    return arg.evaluate_state()
-        # Fallback: devolver evaluación del estado actual
-        return self._state.evaluate_state()
-
     # ---- successors (EXPECTIMAX llama a generateSuccessor y a veces a getSuccessor) ----
     def generateSuccessor(self, agentIndex, action):
         # Crear copia rápida del estado actual (fallback a deepcopy si no existe fast_copy)

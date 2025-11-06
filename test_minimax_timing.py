@@ -1,11 +1,11 @@
-from src.agents.minimax import AlphaBetaAgent
-from src.gameClass.game import BattleCityGame
+from src.agents.expectimax import ExpectimaxAgent
+from src.gameClass.game import BattleCityState
 from src.gameClass.scenarios.level1 import get_level1
 import time
 
 def test_minimax_timing():
     # Crear juego con el nivel más pequeño
-    game = BattleCityGame(board_size=8)
+    game = BattleCityState()
     layout = get_level1()
     game.initialize(layout)
     
@@ -14,7 +14,7 @@ def test_minimax_timing():
     
     for depth in depths:
         print(f"\nPrueba con profundidad {depth} ({depth * 4} niveles - {depth} turnos completos):")
-        agent = AlphaBetaAgent(depth=str(depth), tankIndex=0)
+        agent = ExpectimaxAgent(depth=str(depth), tankIndex=0)
         
         # Medir tiempo
         start_time = time.time()

@@ -1,6 +1,7 @@
 
 class Bullet:
     """Clase que representa una bala en Battle City."""
+    __slots__ = ("position", "direction", "team", "owner_id", "is_active", "prev_position")
     def __init__(self, position, direction, team, owner_id=None):
         self.position = position          # (x, y)
         self.direction = direction        # 'UP', 'DOWN', 'LEFT', 'RIGHT'

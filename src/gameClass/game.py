@@ -253,7 +253,9 @@ class BattleCityState:
         state.teamA_tank = self._copy_tank(self.teamA_tank)
         state.teamB_tanks = [self._copy_tank(t) for t in self.teamB_tanks]
         state.base = self._copy_base(self.base)
-        state.walls = self.walls  # Nota: NO copiar, las paredes cambian raramente
+        # Copiar paredes: aunque cambian raramente, compartir referencias entre
+        # estados sucesores provoca desaparición/daño persistente inesperado
+        state.walls = [self._copy_wall(w) for w in self.walls]
         state.bullets = [self._copy_bullet(b) for b in self.bullets]
         legalActions = state.getLegalActions(tankIndex)
         
@@ -596,6 +598,17 @@ class BattleCityState:
         new_base.position = base.position
         new_base.is_destroyed = base.is_destroyed
         return new_base
+
+    def _copy_wall(self, wall):
+        """Copia una pared (shallow) para evitar compartir la misma instancia
+        entre estados sucesores. Esto previene que un daño en un sucesor
+        afecte al estado padre."""
+        new_wall = Wall.__new__(Wall)
+        new_wall.position = wall.position
+        new_wall.wall_type = wall.wall_type
+        new_wall.is_destroyed = wall.is_destroyed
+        new_wall.health = wall.health
+        return new_wall
 
 
     def _check_collisions(self):

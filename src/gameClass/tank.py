@@ -1,6 +1,7 @@
 from .bullet import Bullet
 class Tank():
     """Clase que representa un tanque en el juego Battle City."""
+    __slots__ = ("position", "spawn_position", "direction", "team", "is_alive", "health", "respawn_timer")
     def __init__(self, position, team):
         self.position = position        # Posición del tanque
         self.spawn_position = position  # Posición donde reaparecerá tras ser destruido

@@ -1,6 +1,7 @@
 
 class Wall():
     """Clase que representa una pared en el juego Battle City."""
+    __slots__ = ("position", "wall_type", "is_destroyed", "health")
     def __init__(self, position, wall_type):
         self.position = position      # (x, y) Coordenadas de la pared
         self.wall_type = wall_type    # Si es 'brick' o 'steel'
