@@ -13,6 +13,7 @@ TIME_PENALTY = 1
 # Penalización por distancia a la base para incentivar la defensa (ajustable)
 BASE_DISTANCE_PENALTY = 0
 
+
 class BattleCityState:
     """Clase que representa el estado del juego Battle City.
     Contiene la información de los elementos de un estado del juego.
@@ -21,11 +22,11 @@ class BattleCityState:
     """
     def __init__(self):
         self.board_size = None        # Tamaño del tablero (board_size x board_size)
-        self.teamA_tank = None              # Estado del tanque     
-        self.teamB_tanks = []               # Estado de los tanques del enemigo
-        self.walls = []                     # Estado de las paredes
-        self.base = None                    # Estado de la base del enemigo
-        self.bullets = []                   # Estado de las balas
+        self.teamA_tank =  ()               # Tupla del jugador (x,y, health, direction)     
+        self.teamB_tanks = [(),()]          # Arreglo de tuplas de los tanques enemigos (x,y, health, direction)
+        self.walls = {}                     # Estado de las paredes
+        self.base = ()                      # Tupla de la base (x,y,isDestroyed)
+        self.bullets = {}                   # Estado de las balas
         self.time_limit = 500               # Tiempo límite 
         self.current_time = 0               # Tiempo actual en ticks
         self.reserves_A = 1                 # Reservas de tanques adicionales para el jugador
@@ -38,27 +39,23 @@ class BattleCityState:
         height = len(layout)
         # Usar el máximo entre ancho/alto para definir board_size (cuadrado)
         self.board_size = height
+        i_tank = 0
         for y in range(len(layout)):
             for x in range(len(layout[y])):
                 cell = layout[y][x]
                 pos = (x, len(layout) - 1 - y)  # Invertir coordenada Y para que (0,0) esté en la esquina inferior izquierda
                 if cell == 'A':
-                    tank = Tank(position=pos, team='A')
-                    tank.spawn_position = pos
-                    self.teamA_tank = tank
+                    self.teamA_tank = (x,y, 3, 'UP')
                 elif cell == 'B':
-                    tank = Tank(position=pos, team='B')
-                    tank.spawn_position = pos
-                    self.teamB_tanks.append(tank)
+                    self.teamB_tanks[i_tank] = (x,y, 3, 'DOWN')
+                    i_tank += 1
                 elif cell == 'b':
-                    self.base = Base(position=pos)
+                    self.base = (x,y,False)
                 elif cell == 'X':
-                    wall = Wall(position=pos, wall_type='brick')
-                    self.walls.append(wall)
+                    self.walls[(x,y)] = (3, 'brick')  # health, type    
                 elif cell == 'S':
-                    wall = Wall(position=pos, wall_type='steel')
-                    self.walls.append(wall)
-    
+                    self.walls[(x,y)] = (3, 'steel')
+
     def getTeamATank(self):
         """Devuelve el tanque del equipo A (jugador)."""
         return self.teamA_tank
