@@ -1,6 +1,8 @@
 from ..utils import manhattanDistance
 import time
 import random
+import threading
+import concurrent.futures
 
 class ExpectimaxAgent:
     def __init__(self, depth=2, time_limit=None, debug=False):
@@ -176,72 +178,123 @@ class ExpectimaxAgent:
                 probs[action] = 0.6 if action == best_action else 0.4 / (len(legalActions) - 1)
         return probs
 
-class ExpectimaxAlphaBetaAgent:
-    def __init__(self, evalFn='evaluate_state', depth=2):
-        self.index = 0
-        self.evaluationFunction = evalFn
-        self.depth = depth
+
+class ParallelExpectimaxAgent(ExpectimaxAgent):
+    """Expectimax agent that evaluates root actions in parallel using threads.
+    """
+    def __init__(self, depth=2, time_limit=None, debug=False, max_workers=None):
+        super().__init__(depth=depth, time_limit=time_limit, debug=debug)
+        # max_workers for ThreadPoolExecutor; None -> default heuristic
+        self.max_workers = max_workers
 
     def getAction(self, gameState):
+        # initialize timing and node counter (thread-safe)
+        self.start_time = time.time()
+        self.node_count = 0
+        self._node_count_lock = threading.Lock()
+
         num_agents = gameState.getNumAgents()
-        root_index = self.index
+        best_overall_score = float("-inf")
+        best_overall_action = None
+        root_index = getattr(self, 'index', 0)
 
-        def expectimax(state, depth, agent_index):
-            if depth == self.depth or state.isTerminal():
-                return self.evaluationFunction(state.getState())
+        def expectimax(state, depth, max_depth, agent_index):
+            # thread-safe increment
+            try:
+                with self._node_count_lock:
+                    self.node_count += 1
+            except Exception:
+                # fallback (shouldn't happen) to non-locked increment
+                self.node_count += 1
 
-            next_agent = (agent_index + 1) % num_agents
+            # stopping conditions
+            if depth >= max_depth or self.is_time_exceeded() or state.isWin() or state.isLose() or state.isLimitTime():
+                return state.evaluate_state()
+
+            curr_num_agents = state.getNumAgents()
+            if curr_num_agents <= 0:
+                return state.evaluate_state()
+            next_agent = (agent_index + 1) % curr_num_agents
             next_depth = depth + 1 if next_agent == root_index else depth
-
             legal_actions = state.getLegalActions(agent_index)
             if not legal_actions:
-                return self.evaluationFunction(state.getState())
+                return state.evaluate_state()
 
-            if agent_index == root_index:  # MAX
-                return max(expectimax(state.generateSuccessor(agent_index, a), next_depth, next_agent)
-                           for a in legal_actions)
-            else:  # EXPECT
-                probs = self.probabilityActions(state, agent_index, legal_actions)
-                return sum(probs[a] * expectimax(state.generateSuccessor(agent_index, a),
-                                                 next_depth, next_agent) for a in legal_actions)
+            # MAX node
+            if agent_index == 0:
+                value = float("-inf")
+                for action in legal_actions:
+                    if self.is_time_exceeded():
+                        break
+                    succ = state.getSuccessor(agent_index, action)
+                    eval_val = expectimax(succ, next_depth, max_depth, next_agent)
+                    value = max(value, eval_val)
+                return value
+            # CHANCE node
+            else:
+                total = 0.0
+                prob = self.probabilityActions(state, agent_index, legal_actions)
+                for action in legal_actions:
+                    if self.is_time_exceeded():
+                        break
+                    succ = state.getSuccessor(agent_index, action)
+                    total += prob.get(action, 0.0) * expectimax(succ, next_depth, max_depth, next_agent)
+                return total
 
-        best_score = float("-inf")
-        best_action = None
-        for action in gameState.getLegalActions(root_index):
-            succ = gameState.generateSuccessor(root_index, action)
-            value = expectimax(succ, 0, (root_index + 1) % num_agents)
-            if value > best_score:
-                best_score, best_action = value, action
-        return best_action
+        # --- Iterative deepening (same step logic as ExpectimaxAgent) ---
+        step = num_agents if num_agents > 0 else 1
+        for current_max in range(step, (self.depth * step) + 1, step):
+            if self.is_time_exceeded() or current_max > self.depth:
+                break
 
-    def probabilityActions(self, state, agentIndex, legalActions):
-        """
-        Devuelve una distribución de probabilidad suave para las acciones del enemigo.
-        Se priorizan las acciones más cercanas a la base enemiga.
-        """
-        probs = {}
-        if not legalActions:
-            return {}
+            current_best_action = None
+            current_best_score = float("-inf")
 
-        # Evita usar agentIndex como índice: usa siempre 0 inicial
-        best_action = legalActions[0]
-        best_score = float("inf")
+            legal_actions = gameState.getLegalActions(root_index)
+            if not legal_actions:
+                continue
 
-        enemy = state.teamB_tanks[agentIndex - 1] if agentIndex > 0 and len(state.teamB_tanks) >= agentIndex else None
-        if enemy is None or not enemy.is_alive:
-            # Distribución uniforme si el tanque enemigo está muerto
-            uniform = 1.0 / len(legalActions)
-            return {a: uniform for a in legalActions}
+            # choose number of workers
+            max_workers = self.max_workers or min(32, len(legal_actions))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+                # submit one task per root legal action
+                future_to_action = {ex.submit(expectimax, gameState.getSuccessor(root_index, a), 0, current_max, (root_index + 1) % num_agents): a for a in legal_actions}
 
-        for action in legalActions:
-            succ = state.generateSuccessor(agentIndex, action)
-            # heurística simple: distancia a base enemiga
-            base_pos = state.teamA_base if agentIndex != 0 else state.teamB_base
-            dist = state.manhattanDistance(enemy.position, base_pos)
-            if dist < best_score:
-                best_score, best_action = dist, action
+                # collect results as they complete
+                for fut in concurrent.futures.as_completed(future_to_action):
+                    action = future_to_action[fut]
+                    if self.is_time_exceeded():
+                        break
+                    try:
+                        val = fut.result()
+                    except Exception as e:
+                        if self.debug:
+                            print(f"[ParallelExpectimax] exception evaluating action {action}: {e}")
+                        val = float("-inf")
 
-        # Distribución suave (acción mejor con 0.6, resto uniforme)
-        for action in legalActions:
-            probs[action] = 0.6 if action == best_action else 0.4 / (len(legalActions) - 1)
-        return probs
+                    if self.debug:
+                        try:
+                            ev = gameState.getSuccessor(root_index, action).evaluate_state()
+                        except Exception:
+                            ev = None
+                        print(f"[DEBUG][P-IDS {current_max}] action={action} -> expectimax={val} eval(successor)={ev}")
+
+                    if val > current_best_score:
+                        current_best_score = val
+                        current_best_action = action
+
+            if current_best_action is not None:
+                best_overall_action = current_best_action
+                best_overall_score = current_best_score
+
+            # --- Mostrar progreso por iteración ---
+            if self.debug:
+                print(f"[ParallelExpectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+            else:
+                try:
+                    if not getattr(self, 'suppress_output', False):
+                        print(f"[ParallelExpectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+                except Exception:
+                    print(f"[ParallelExpectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+
+        return best_overall_action

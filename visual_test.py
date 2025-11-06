@@ -2,7 +2,7 @@ import pygame
 import sys
 import time
 from src.gameClass.game import BattleCityState
-from src.agents.expectimax import ExpectimaxAgent
+from src.agents.expectimax import ExpectimaxAgent, ParallelExpectimaxAgent
 from src.agents.mcts import MCTSAgent
 from src.gameClass.enemy_scripts import ScriptedEnemyAgent
 from src.gameClass.scenarios.level1 import get_level1
@@ -86,7 +86,7 @@ def main():
     game_state.initialize(layout)
 
     # Agentes
-    agentA = ExpectimaxAgent(depth=3,time_limit=2, debug=True)
+    agentA = ParallelExpectimaxAgent(depth=3,time_limit=None, debug=True)
     enemies = [ScriptedEnemyAgent(i+1, script_type='attack_base') for i in range(len(game_state.getTeamBTanks()))]
 
     # Ventana
@@ -95,6 +95,34 @@ def main():
     pygame.display.set_caption("Battle City - Visual Tester")
 
     clock = pygame.time.Clock()
+
+    # --- Mostrar pantalla de título antes de iniciar el algoritmo ---
+    try:
+        title_font = pygame.font.SysFont(None, 48)
+    except Exception:
+        pygame.font.init()
+        title_font = pygame.font.SysFont(None, 48)
+
+    title_start = pygame.time.get_ticks()
+    TITLE_DURATION_MS = 5000
+    while pygame.time.get_ticks() - title_start < TITLE_DURATION_MS:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        screen.fill(COLORS['background'])
+        title_surf = title_font.render("BattleCity Agent", True, (255, 255, 255))
+        tw, th = title_surf.get_size()
+        screen.blit(title_surf, ((size_px - tw) // 2, (size_px - th) // 2))
+        pygame.display.flip()
+        clock.tick(FPS)
+
+    # Mostrar el primer frame (estado inicial) antes de que los agentes calculen la primera acción
+    draw_game(screen, game_state, action=None)
+    pygame.display.flip()
+    # breve pausa para asegurar que el frame inicial se perciba
+    pygame.time.delay(200)
 
     running = True
     while running:

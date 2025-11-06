@@ -334,10 +334,6 @@ class BattleCityState:
         alive_enemies = [e for e in self.teamB_tanks if e.isAlive()]
         num_alive = len(alive_enemies)
         
-        if num_alive == 0:
-            # No hay enemigos vivos pero hay reservas
-            return 100 - TIME_PENALTY * self.current_time
-        
         # Encontrar el enemigo más peligroso (el más cercano a la base)
         threat_enemy = None
         min_threat_dist = float('inf')
@@ -403,47 +399,18 @@ class BattleCityState:
             # Dos enemigos sin reservas: ser agresivo
             aggression_bonus = 30
         
-        # ===== PENALIZACIONES Y BONIFICACIONES GENERALES =====
-        
-        # Penalización por reservas enemigas (quieren aparecer más enemigos)
-        reserves_penalty = self.reserves_B * 20
-        
-        # Bonificación por eliminar reservas (menos enemigos futuros)
-        kill_bonus = 0
-        # Si empezamos con 1 reserva y ahora es 0, tuvimos éxito
-        if self.reserves_B == 0:
-            kill_bonus = 50
         
         # Penalización suave por tiempo (preferir victorias rápidas)
         time_penalty = TIME_PENALTY * self.current_time * 5
-        
-        # ===== CÁLCULO FINAL =====
-        
-        # Mobility bonus: preferir posiciones con más opciones de movimiento
-        # Esto desincentiva quedarse 'acamapado' en un solo pasillo.
-        try:
-            legal_for_player = self.getLegalActions(0)
-            mobility = sum(1 for a in legal_for_player if isinstance(a, str) and a.startswith('MOVE_'))
-        except Exception:
-            mobility = 0
 
         final_score = (
             defend_score           # Proteger base
             + attack_score         # Atacar enemigos, con prioridad estratégica
             + aggression_bonus     # Escalar cuando es óptimo
             - danger_score         # Penalizar enemigos cercanos a base
-            - reserves_penalty     # Penalizar futuras apariciones
-            + kill_bonus           # Bonus por matar enemigos/eliminar reservas
             - time_penalty         # Preferir victorias rápidas
         )
 
-        # Añadir movilidad con peso pequeño
-        final_score += 2 * mobility
-        # Penalizar estar lejos de la base (incentivar defensa)
-        try:
-            final_score -= BASE_DISTANCE_PENALTY * dist_player_to_base
-        except Exception:
-            pass
         return final_score
 
 
