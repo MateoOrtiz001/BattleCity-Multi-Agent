@@ -2,19 +2,13 @@ import random
 from ..utils import manhattanDistance
 
 class ScriptedEnemyAgent:
-    """
-    Un agente simple que sigue un script determinista 
-    (o con un poco de aleatoriedad) para moverse en el juego 'real'.
-    """
+    """Un agente simple para los enemigos que sigue un script predefinido."""
     def __init__(self, agent_index, script_type='attack_base'):
         self.agent_index = agent_index
         self.script_type = script_type
 
     def getAction(self, game_state):
-        """
-        Devuelve UNA sola acción (string), no probabilidades.
-        Este es el 'cerebro' real del bot.
-        """
+        """Devuelve la acción a tomar en el estado actual del juego."""
         
         legal_actions = game_state.getLegalActions(self.agent_index)
         
@@ -62,7 +56,6 @@ class ScriptedEnemyAgent:
                 move_actions.append(action)
 
         # 2. Decidir si disparar (con un poco de aleatoriedad)
-        # Las acciones FIRE vienen con dirección, p. ej. 'FIRE_UP'.
         # Buscar todas las acciones de tipo FIRE y elegir una al azar/según probabilidad.
         fire_actions = [a for a in legal_actions if isinstance(a, str) and a.startswith('FIRE')]
         if fire_actions and random.random() < 0.6:

@@ -13,7 +13,7 @@ from src.gameClass.tank import Tank
 from src.gameClass.walls import Wall
 from src.gameClass.base import Base
 from src.gameClass.bullet import Bullet
-from src.gameClass.enemy_scripts import ScriptedEnemyAgent
+from agents.enemyAgent import ScriptedEnemyAgent
 
 # Inicializar Pygame
 pygame.init()

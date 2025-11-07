@@ -520,23 +520,6 @@ class BattleCityState:
         elif action == 'STOP':
             pass
 
-    def _has_line_of_fire(self, tankA, target_pos, walls):
-        """Devuelve True si no hay muro entre el tanque y el objetivo."""
-        x0, y0 = tankA['position']
-        x1, y1 = target_pos
-        if x0 == x1:
-            dy = 1 if y1 > y0 else -1
-            for y in range(y0 + dy, y1, dy):
-                if any((w['position'] == (x0, y) and not w['is_destroyed']) for w in walls):
-                    return False
-            return True
-        elif y0 == y1:
-            dx = 1 if x1 > x0 else -1
-            for x in range(x0 + dx, x1, dx):
-                if any((w['position'] == (x, y0) and not w['is_destroyed']) for w in walls):
-                    return False
-            return True
-        return False
 
     def _copy_tank(self, tank):
         """Copia solo los atributos que importan."""
@@ -765,28 +748,3 @@ class BattleCityState:
 
         self.teamB_tanks = new_teamB
         
-    def advance_time(self, delta_seconds):
-        """Avanza el tiempo real del juego y maneja respawns.
-
-        delta_seconds: segundos transcurridos desde la última llamada.
-        """
-        # Usamos current_time para medir el tiempo del juego
-        self.current_time += delta_seconds
-
-        # Manejar timers de respawn si se usan (tank.respawn_timer)
-        tanks = []
-        if self.teamA_tank:
-            tanks.append(self.teamA_tank)
-        tanks.extend(self.teamB_tanks)
-
-        for t in tanks:
-            if not getattr(t, 'is_alive', True) and getattr(t, 'respawn_timer', 0) > 0:
-                t.respawn_timer -= delta_seconds
-                if t.respawn_timer <= 0:
-                    try:
-                        t.respawn()
-                    except Exception:
-                        t.is_alive = True
-                        t.health = 3
-
-    # Nota: is_terminal usa elapsed_time para decidir empates por tiempo

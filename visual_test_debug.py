@@ -22,6 +22,7 @@ COLORS = {
     'bullet': (255, 255, 255),
 }
 
+
 def draw_game(screen, game_state, action=None):
     screen.fill(COLORS['background'])
     size = game_state.getBoardSize()
@@ -76,6 +77,7 @@ def draw_game(screen, game_state, action=None):
 
     pygame.display.flip()
 
+
 def main():
     pygame.init()
 
@@ -86,14 +88,14 @@ def main():
     game_state.initialize(layout)
 
     # Agentes
-    #agentA = ParallelExpectimaxAgent(depth=3,time_limit=None, debug=True)
-    agentA = ParallelAlphaBetaAgent(depth=3, tankIndex=0, time_limit=7)
+    # Use non-parallel AlphaBetaAgent for comparison
+    agentA = AlphaBetaAgent(depth=3, tankIndex=0, time_limit=None)
     enemies = [ScriptedEnemyAgent(i+1, script_type='attack_base') for i in range(len(game_state.getTeamBTanks()))]
 
     # Ventana
     size_px = game_state.getBoardSize() * TILE_SIZE
     screen = pygame.display.set_mode((size_px, size_px))
-    pygame.display.set_caption("Battle City - Visual Tester")
+    pygame.display.set_caption("Battle City - Visual Debugger")
 
     clock = pygame.time.Clock()
 
@@ -105,7 +107,7 @@ def main():
         title_font = pygame.font.SysFont(None, 48)
 
     title_start = pygame.time.get_ticks()
-    TITLE_DURATION_MS = 5000
+    TITLE_DURATION_MS = 2000
     while pygame.time.get_ticks() - title_start < TITLE_DURATION_MS:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -113,7 +115,7 @@ def main():
                 sys.exit()
 
         screen.fill(COLORS['background'])
-        title_surf = title_font.render("BattleCity Agent", True, (255, 255, 255))
+        title_surf = title_font.render("BattleCity Agent (non-parallel)", True, (255, 255, 255))
         tw, th = title_surf.get_size()
         screen.blit(title_surf, ((size_px - tw) // 2, (size_px - th) // 2))
         pygame.display.flip()
@@ -122,28 +124,23 @@ def main():
     # Mostrar el primer frame (estado inicial) antes de que los agentes calculen la primera acción
     draw_game(screen, game_state, action=None)
     pygame.display.flip()
-    # breve pausa para asegurar que el frame inicial se perciba
     pygame.time.delay(200)
 
     running = True
     while running:
         clock.tick(FPS)
 
-        # Eventos
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        # --- Turno de los agentes ---
         if game_state.isWin() or game_state.isLose():
             print("¡Fin del juego!", "Ganaste" if game_state.isWin() else "Perdiste")
             time.sleep(3)
             running = False
             continue
 
-        # Turno jugador
         actionA = agentA.getAction(game_state)
-        # Depuración: mostrar acción y posición antes/después
         tankA = game_state.getTeamATank()
         pos_before = tankA.getPos() if tankA else None
         print(f"[DEBUG] Agent action: {actionA} | pos_before={pos_before}")
@@ -152,44 +149,29 @@ def main():
         pos_after = tankA.getPos() if tankA else None
         print(f"[DEBUG] pos_after={pos_after} | score={game_state.score} | time={game_state.current_time}")
 
-        # Turnos enemigos
         for i, enemy_agent in enumerate(enemies, start=1):
             actionB = enemy_agent.getAction(game_state)
             if actionB:
                 game_state.applyTankAction(i, actionB)
 
-        # Avanzar físicas
         game_state.moveBullets()
         game_state._check_collisions()
         game_state._handle_deaths_and_respawns()
 
-        # Avanzar el tiempo del juego (ticks)
         try:
             game_state.current_time += 1
         except Exception:
             pass
 
-        # Actualizar el score en la partida en vivo usando la función de evaluación
         try:
             game_state.score = game_state.evaluate_state()
         except Exception:
-            # Si evaluate_state falla por alguna razón, dejar el score tal cual
             pass
 
-        # Dibujar estado (pasar la acción elegida por el agente 0)
         draw_game(screen, game_state, action=actionA)
 
     pygame.quit()
     sys.exit()
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        # Graceful shutdown if user sends Ctrl-C from terminal
-        try:
-            pygame.quit()
-        except Exception:
-            pass
-        print("Interrupted by user. Exiting...")
-        sys.exit(0)
+    main()

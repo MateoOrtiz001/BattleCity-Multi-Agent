@@ -5,6 +5,7 @@ import threading
 import concurrent.futures
 
 class ExpectimaxAgent:
+    """Algoritmo Expectimax con profundización iterativa."""
     def __init__(self, depth=2, time_limit=None, debug=False):
         self.depth = depth
         self.time_limit = time_limit
@@ -180,8 +181,7 @@ class ExpectimaxAgent:
 
 
 class ParallelExpectimaxAgent(ExpectimaxAgent):
-    """Expectimax agent that evaluates root actions in parallel using threads.
-    """
+    """Algoritmo Expectimax que corre en paralelo."""
     def __init__(self, depth=2, time_limit=None, debug=False, max_workers=None):
         super().__init__(depth=depth, time_limit=time_limit, debug=debug)
         # max_workers for ThreadPoolExecutor; None -> default heuristic
