@@ -32,23 +32,22 @@ class ReflexTankAgent:
         
     def run_offensiveFunction(self, game_state, legal_actions):
         # Evalua las acciones y elige la mejor para ir a atacar más agresivamente
+        
+        score = []
+        minimal_distance = float('inf')
         for action in legal_actions:
             succesor_game_state = game_state.getSuccessor(self.agent_index, action)
-            newPos = succesor_game_state.getTankByIndex(self.agent_index).getPos()
-            newPos_enemy = [tank.getPos() for tank in succesor_game_state.getTeamBTanks() if tank.isAlive()]    
-        best_action = 'STOP'
-        tank = game_state.getTankByIndex(self.agent_index)
-        enemy_tanks = game_state.getTeamBTanks()
+            tank = succesor_game_state.getTeamATank()
+            enemy_tanks = succesor_game_state.getTeamBTanks()
+            newPos = tank.getPos()
+            newPos_enemy = [tank.getPos() for tank in enemy_tanks if tank.isAlive()]  
+            dist_2_enemies = [manhattanDistance(newPos, enemy_pos) for enemy_pos in newPos_enemy]
+            min_dist = min(dist_2_enemies) if dist_2_enemies else 0
+            if min_dist < minimal_distance:
+                minimal_distance = min_dist
+            # Evaluar la acción basándose en la distancia al enemigo más cercano
+            score.append(5/minimal_distance)
 
-
-
-    def evaluateFunction(self, state, action):
-        # Evaluar la acción basándose en múltiples factores
-        score = 0
-        
-        # Factor 1: Distancia a la base enemiga
-        # Factor 2: Cobertura disponible
-        # Factor 3: Línea de tiro clara al enemigo
-        # Factor 4: Riesgo de recibir disparos
-        
         return score
+              
+        

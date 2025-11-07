@@ -32,7 +32,7 @@ class ExpectimaxAgent:
             self.node_count += 1
 
             # Condición de parada
-            if depth >= max_depth or self.is_time_exceeded() or state.isWin() or state.isLose() or state.isLimitTime():
+            if depth >= max_depth or self.is_time_exceeded() or state.isTerminal():
                 return state.evaluate_state()
 
             # Use the current number of agents in 'state' (puede cambiar dinámicamente)
@@ -208,7 +208,7 @@ class ParallelExpectimaxAgent(ExpectimaxAgent):
                 self.node_count += 1
 
             # stopping conditions
-            if depth >= max_depth or self.is_time_exceeded() or state.isWin() or state.isLose() or state.isLimitTime():
+            if depth >= max_depth or self.is_time_exceeded() or state.isTerminal():
                 return state.evaluate_state()
 
             curr_num_agents = state.getNumAgents()

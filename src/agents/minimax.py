@@ -46,7 +46,7 @@ class MinimaxAgent():
             self.expanded_nodes += 1
 
             # Terminal or max depth reached
-            if depth >= self.depth or state.is_terminal() or self.is_time_exceeded():
+            if depth >= self.depth or state.isTerminal() or self.is_time_exceeded():
                 return state.evaluate_state()
 
             next_agent = (agent_index + 1) % num_tanks
@@ -126,7 +126,7 @@ class AlphaBetaAgent():
             self.expanded_nodes += 1
 
             # Terminal or max depth reached
-            if depth >= self.depth or state.is_terminal() or self.is_time_exceeded():
+            if depth >= self.depth or state.isTerminal() or self.is_time_exceeded():
                 return state.evaluate_state()
 
             next_agent = (agent_index + 1) % num_tanks
@@ -220,7 +220,7 @@ class ParallelAlphaBetaAgent(AlphaBetaAgent):
                 self.expanded_nodes += 1
 
             # Terminal or max depth reached
-            if depth >= self.depth or state.is_terminal() or self.is_time_exceeded():
+            if depth >= self.depth or state.isTerminal() or self.is_time_exceeded():
                 return state.evaluate_state()
 
             next_agent = (agent_index + 1) % num_tanks
