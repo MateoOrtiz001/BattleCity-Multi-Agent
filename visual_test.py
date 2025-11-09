@@ -1,3 +1,4 @@
+import argparse
 import pygame
 import sys
 import time
@@ -8,6 +9,7 @@ from src.agents.enemyAgent import ScriptedEnemyAgent
 from src.gameClass.scenarios.level1 import get_level1
 from src.gameClass.scenarios.level2 import get_level2
 from src.gameClass.scenarios.level3 import get_level3
+from src.gameClass.scenarios.level4 import get_level4
 import concurrent.futures
 
 # Configuración visual
@@ -79,16 +81,38 @@ def draw_game(screen, game_state, action=None):
 
 def main():
     pygame.init()
+    # --- Parsear argumentos de línea de comandos ---
+    parser = argparse.ArgumentParser(description='Visual tester para agentes de BattleCity. Selecciona algoritmo, profundidad y nivel a simular.')
+    parser.add_argument('-a', '--algorithm', choices=['minimax', 'alphabeta', 'expectimax'], default='expectimax', help='Algoritmo a usar: minimax, alphabeta, expectimax')
+    parser.add_argument('-d', '--depth', type=int, default=3, help='Número de profundidad (turnos completos)')
+    parser.add_argument('-l', '--level', type=int, choices=[1,2,3,4], default=1, help='Nivel a simular (1-4)')
+    parser.add_argument('-t', '--time', type=float, default=10.0, help='Límite de tiempo por decisión en segundos (float)')
+    args = parser.parse_args()
 
-    # Layout de prueba
-    layout = get_level1()
+    # Layout de prueba según argumento --level
+    level_map = {1: get_level1, 2: get_level2, 3: get_level3, 4: get_level4}
+    layout_func = level_map.get(args.level, get_level1)
+    layout = layout_func()
 
     game_state = BattleCityState()
     game_state.initialize(layout)
 
-    # Agentes
-    #agentA = ParallelExpectimaxAgent(depth=3,time_limit=None, debug=True)
-    agentA = ExpectimaxAgent(depth=3, time_limit=10,debug=True)
+    # Agentes: escoger según argumento --algorithm
+    alg = args.algorithm
+    depth = args.depth
+    time_limit = args.time
+
+    if alg == 'minimax':
+        agentA = MinimaxAgent(depth=depth)
+        # MinimaxAgent constructor no acepta time_limit; ajustar atributo si es necesario
+        try:
+            agentA.time_limit = time_limit
+        except Exception:
+            pass
+    elif alg == 'alphabeta':
+        agentA = AlphaBetaAgent(depth=depth, time_limit=time_limit)
+    else:  # expectimax
+        agentA = ExpectimaxAgent(depth=depth, time_limit=time_limit, debug=True)
     enemies = [ScriptedEnemyAgent(i+1, script_type='attack_base') for i in range(len(game_state.getTeamBTanks()))]
 
     # Ventana
@@ -112,9 +136,9 @@ def main():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-
         screen.fill(COLORS['background'])
-        title_surf = title_font.render("BattleCity Agent", True, (255, 255, 255))
+        title_text = f"BattleCity Agent - {alg} d={depth} lvl={args.level} t={time_limit}s"
+        title_surf = title_font.render(title_text, True, (255, 255, 255))
         tw, th = title_surf.get_size()
         screen.blit(title_surf, ((size_px - tw) // 2, (size_px - th) // 2))
         pygame.display.flip()
