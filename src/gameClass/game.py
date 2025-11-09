@@ -216,8 +216,18 @@ class BattleCityState:
         # Si no hay acciones de movimiento ni FIRE, permitir STOP
         if not actions:
             actions.append('STOP')
-            
-        return actions
+        # Evitar acciones duplicadas que inflan la ramificación
+        try:
+            # Preservar orden y eliminar duplicados
+            seen = set()
+            deduped = []
+            for a in actions:
+                if a not in seen:
+                    deduped.append(a)
+                    seen.add(a)
+            return deduped
+        except Exception:
+            return actions
 
     def getNumAgents(self):
         """Número total de agentes (1 tanque de A + len(teamB_tanks))."""
@@ -302,11 +312,7 @@ class BattleCityState:
 
         defend_score = 0
         if min_threat_dist < 8:  # Si hay enemigos cerca de la base
-            # Aumentar urgencia defensiva
-            defend_score = max(0, 20 - dist_player_to_base) * 3
-        else:
-            # Si no hay amenaza inmediata, recompensa más moderada
-            defend_score = max(0, 15 - dist_player_to_base) * 1.5
+            defend_score = 50 / (dist_player_to_base + 1)   # Recompensa por estar cerca de la base
         
         # Penalización por enemigos cercanos a la base
         danger_score = 0
@@ -321,7 +327,7 @@ class BattleCityState:
             dist_to_threat = manhattanDistance(posA, threat_enemy.getPos())
             
             # Recompensa agresiva por estar cerca del enemigo prioritario
-            attack_score += 40 / (dist_to_threat + 1)
+            attack_score += 100 / (dist_to_threat + 1)
             
             # Bonus extra si el enemigo prioritario está amenazando la base
             if min_threat_dist < 5:
@@ -349,11 +355,11 @@ class BattleCityState:
         time_penalty = TIME_PENALTY * self.current_time * 5
 
         final_score = (
-            defend_score           # Proteger base
-            + attack_score         # Atacar enemigos, con prioridad estratégica
-            + aggression_bonus     # Escalar cuando es óptimo
-            - danger_score         # Penalizar enemigos cercanos a base
-            - time_penalty         # Preferir victorias rápidas
+            defend_score            # Proteger base
+            + attack_score          # Atacar enemigos, con prioridad estratégica
+            + aggression_bonus      # Escalar cuando es óptimo
+            - danger_score          # Penalizar enemigos cercanos a base
+            - time_penalty          # Preferir victorias rápidas
         )
 
         return final_score
