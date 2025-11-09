@@ -1,0 +1,107 @@
+{
+  "summary": {
+    "wins": 4,
+    "losses": 6,
+    "draws": 0,
+    "num_games": 10
+  },
+  "per_game": [
+    {
+      "game_index": 0,
+      "result": "loss",
+      "duration": 408.74886417388916,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 1,
+      "result": "loss",
+      "duration": 217.83339500427246,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 2,
+      "result": "win",
+      "duration": 187.80685949325562,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 3,
+      "result": "loss",
+      "duration": 317.6628770828247,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 4,
+      "result": "loss",
+      "duration": 269.6424732208252,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 5,
+      "result": "win",
+      "duration": 247.95362663269043,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 6,
+      "result": "win",
+      "duration": 102.62772154808044,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 7,
+      "result": "loss",
+      "duration": 326.0645041465759,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 8,
+      "result": "loss",
+      "duration": 247.2475802898407,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 9,
+      "result": "win",
+      "duration": 338.332204580307,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    }
+  ],
+  "aggregate": {
+    "mean_duration_per_simulation": 266.3920106172562,
+    "mean_avg_nodes_per_search": 0.0,
+    "overall_total_nodes": 0,
+    "overall_total_decisions": 0,
+    "overall_avg_nodes_per_search": 0.0
+  }
+}

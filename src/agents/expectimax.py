@@ -3,6 +3,12 @@ import time
 import random
 import threading
 import concurrent.futures
+# Import reflex agent at module load to avoid import-time delay when used as fallback
+try:
+    from .reflexAgent import ReflexTankAgent
+except Exception:
+    # If import fails here, fallback import will still be attempted lazily later.
+    ReflexTankAgent = None
 
 class ExpectimaxAgent:
     """Algoritmo Expectimax con profundización iterativa."""
@@ -107,7 +113,21 @@ class ExpectimaxAgent:
                         print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
                 except Exception:
                     print(f"[Expectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
-
+            try:
+                if self.is_time_exceeded():
+                    from .reflexAgent import ReflexTankAgent
+                    # 50/50 entre ofensivo y defensivo
+                    rtype = 'offensive' if random.random() < 0.5 else 'defensive'
+                    reflex = ReflexTankAgent(script_type=rtype)
+                    # Log de fallback
+                    try:
+                        elapsed = time.time() - self.start_time if self.start_time else 0.0
+                        print(f"[FALLBACK] {self.__class__.__name__} exceeded time after {elapsed:.2f}s, nodes={getattr(self,'node_count',None)} -> ReflexTankAgent({rtype})")
+                    except Exception:
+                        print(f"[FALLBACK] {self.__class__.__name__} exceeded time -> ReflexTankAgent({rtype})")
+                    return reflex.getAction(gameState)
+            except Exception:
+                pass
         return best_overall_action
 
     
@@ -138,45 +158,86 @@ class ExpectimaxAgent:
             uniform = 1.0 / len(legalActions)
             return {a: uniform for a in legalActions}
 
-        for action in legalActions:
-            # evaluar la posición del enemigo tras realizar la acción
+        # Construir conjunto de acciones prohibidas según la política del usuario
+        disallowed = set(['MOVE_UP', 'FIRE_UP', 'FIRE_DOWN'])
+        # Determinar posición del enemigo y de la base
+        try:
+            enemy_pos = enemy.getPos()
+        except Exception:
+            enemy_pos = getattr(enemy, 'position', None)
+        try:
+            base_pos = state.getBase().getPosition()
+        except Exception:
+            base_pos = getattr(state.base, 'position', None)
+
+        # Si el enemigo está a la izquierda de la base, quitar la acción de moverse a la izquierda
+        if enemy_pos is not None and base_pos is not None:
             try:
-                succ = state.getSuccessor(agentIndex, action)
-                succ_enemy = None
-                try:
-                    succ_enemy = succ.getTankByIndex(agentIndex)
-                except Exception:
-                    # fallback: buscar en estructuras internas
-                    if hasattr(succ, 'teamB_tanks') and agentIndex > 0:
-                        succ_enemy = succ.teamB_tanks[agentIndex - 1] if len(succ.teamB_tanks) >= agentIndex else None
-                if succ_enemy is None:
-                    # si no podemos obtener el tanque sucesor, usar la posición actual
-                    enemy_pos = getattr(enemy, 'getPos', lambda: getattr(enemy, 'position', None))()
-                else:
-                    enemy_pos = getattr(succ_enemy, 'getPos', lambda: getattr(succ_enemy, 'position', None))()
-                base_pos = succ.getBase().getPosition() if hasattr(succ, 'getBase') else succ.getBase().getPosition()
-                dist = manhattanDistance(enemy_pos, base_pos)
+                ex, ey = enemy_pos
+                bx, by = base_pos
+                if ex < bx:
+                    disallowed.add('MOVE_LEFT')
+                elif ex > bx:
+                    disallowed.add('MOVE_RIGHT')
             except Exception:
-                # en caso de fallo de la simulación, usar la posición actual del enemy
+                pass
+
+        # Construir lista de acciones permitidas (manteniendo orden original)
+        allowed = [a for a in legalActions if a not in disallowed]
+
+        # Si ninguna acción queda permitida, devolver distribución uniforme sobre las acciones legales
+        if not allowed:
+            uniform = 1.0 / len(legalActions)
+            return {a: uniform for a in legalActions}
+
+        # Buscar la acción "mejor" entre las permitidas según distancia a la base (sin generar sucesores)
+        for action in allowed:
+            try:
                 try:
-                    base_pos = state.getBase().getPosition()
+                    cur_pos = enemy.getPos()
                 except Exception:
-                    base_pos = None
-                enemy_pos = getattr(enemy, 'getPos', lambda: getattr(enemy, 'position', None))()
-                if base_pos is None or enemy_pos is None:
+                    cur_pos = getattr(enemy, 'position', None)
+
+                if isinstance(action, str) and action.startswith('MOVE_') and cur_pos is not None:
+                    dir = action.split('_', 1)[1]
+                    x, y = cur_pos
+                    if dir == 'UP': succ_pos = (x, y + 1)
+                    elif dir == 'DOWN': succ_pos = (x, y - 1)
+                    elif dir == 'LEFT': succ_pos = (x - 1, y)
+                    elif dir == 'RIGHT': succ_pos = (x + 1, y)
+                    else:
+                        succ_pos = cur_pos
+                else:
+                    # FIRE_* y STOP mantienen la misma posición (aproximación)
+                    succ_pos = cur_pos
+
+                if succ_pos is None or base_pos is None:
                     dist = float('inf')
                 else:
-                    dist = manhattanDistance(enemy_pos, base_pos)
+                    dist = manhattanDistance(succ_pos, base_pos)
+            except Exception:
+                # Fallback conservador
+                try:
+                    enemy_pos_f = getattr(enemy, 'getPos', lambda: getattr(enemy, 'position', None))()
+                except Exception:
+                    enemy_pos_f = getattr(enemy, 'position', None)
+                if base_pos is None or enemy_pos_f is None:
+                    dist = float('inf')
+                else:
+                    dist = manhattanDistance(enemy_pos_f, base_pos)
 
             if dist < best_score:
                 best_score, best_action = dist, action
 
-        # Distribución suave (acción mejor con 0.6, resto uniforme)
+        # Distribuir probabilidades: acciones prohibidas => 0; entre las permitidas aplicar la distribución suave
         for action in legalActions:
-            if len(legalActions) == 1:
-                probs[action] = 1.0
+            if action in disallowed:
+                probs[action] = 0.0
             else:
-                probs[action] = 0.6 if action == best_action else 0.4 / (len(legalActions) - 1)
+                if len(allowed) == 1:
+                    probs[action] = 1.0
+                else:
+                    probs[action] = 0.6 if action == best_action else 0.4 / (len(allowed) - 1)
         return probs
 
 
@@ -296,5 +357,22 @@ class ParallelExpectimaxAgent(ExpectimaxAgent):
                         print(f"[ParallelExpectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
                 except Exception:
                     print(f"[ParallelExpectimax] Profundidad {current_max}: nodos expandidos = {self.node_count}")
+
+        # Si se superó el tiempo de búsqueda, usar agente reflexivo como fallback
+        try:
+            if self.is_time_exceeded():
+                from .reflexAgent import ReflexTankAgent
+                # 50/50 entre ofensivo y defensivo
+                rtype = 'offensive' if random.random() < 0.5 else 'defensive'
+                reflex = ReflexTankAgent(script_type=rtype)
+                # Log de fallback
+                try:
+                    elapsed = time.time() - self.start_time if self.start_time else 0.0
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time after {elapsed:.2f}s, nodes={getattr(self,'node_count',None)} -> ReflexTankAgent({rtype})")
+                except Exception:
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time -> ReflexTankAgent({rtype})")
+                return reflex.getAction(gameState)
+        except Exception:
+            pass
 
         return best_overall_action

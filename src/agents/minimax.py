@@ -3,6 +3,13 @@ import time
 import threading
 import concurrent.futures
 import os
+import random
+
+# Pre-import ReflexTankAgent to avoid import latency when used as fallback (first call can block GUI)
+try:
+    from .reflexAgent import ReflexTankAgent
+except Exception:
+    ReflexTankAgent = None
 
 
 class MinimaxAgent():
@@ -88,6 +95,21 @@ class MinimaxAgent():
             if score > best_score:
                 best_score = score
                 best_action = action
+
+        # Si se superó el tiempo, fallback a agente reflexivo 50/50 (offensive/defensive)
+        try:
+            if self.is_time_exceeded():
+                from .reflexAgent import ReflexTankAgent
+                rtype = 'offensive' if random.random() < 0.5 else 'defensive'
+                reflex = ReflexTankAgent(script_type=rtype)
+                try:
+                    elapsed = time.time() - self.start_time if self.start_time else 0.0
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time after {elapsed:.2f}s, nodes={getattr(self,'expanded_nodes',None)} -> ReflexTankAgent({rtype})")
+                except Exception:
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time -> ReflexTankAgent({rtype})")
+                return reflex.getAction(gameState)
+        except Exception:
+            pass
 
         return best_action
 
@@ -179,6 +201,21 @@ class AlphaBetaAgent():
                     best_score = score
                     best_action = action
                 alpha = max(alpha, best_score)
+
+        # Si se superó el tiempo, fallback a agente reflexivo 50/50
+        try:
+            if self.is_time_exceeded():
+                from .reflexAgent import ReflexTankAgent
+                rtype = 'offensive' if random.random() < 0.5 else 'defensive'
+                reflex = ReflexTankAgent(script_type=rtype)
+                try:
+                    elapsed = time.time() - self.start_time if self.start_time else 0.0
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time after {elapsed:.2f}s, nodes={getattr(self,'expanded_nodes',None)} -> ReflexTankAgent({rtype})")
+                except Exception:
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time -> ReflexTankAgent({rtype})")
+                return reflex.getAction(gameState)
+        except Exception:
+            pass
 
         return best_action
 
@@ -307,5 +344,20 @@ class ParallelAlphaBetaAgent(AlphaBetaAgent):
                         best_score = score
                         best_action = action
                     alpha = max(alpha, best_score)
+
+        # Si se superó el tiempo, fallback a agente reflexivo 50/50
+        try:
+            if self.is_time_exceeded():
+                from .reflexAgent import ReflexTankAgent
+                rtype = 'offensive' if random.random() < 0.5 else 'defensive'
+                reflex = ReflexTankAgent(script_type=rtype)
+                try:
+                    elapsed = time.time() - self.start_time if self.start_time else 0.0
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time after {elapsed:.2f}s, nodes={getattr(self,'expanded_nodes',None)} -> ReflexTankAgent({rtype})")
+                except Exception:
+                    print(f"[FALLBACK] {self.__class__.__name__} exceeded time -> ReflexTankAgent({rtype})")
+                return reflex.getAction(gameState)
+        except Exception:
+            pass
 
         return best_action

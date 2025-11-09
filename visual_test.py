@@ -8,6 +8,7 @@ from src.agents.enemyAgent import ScriptedEnemyAgent
 from src.gameClass.scenarios.level1 import get_level1
 from src.gameClass.scenarios.level2 import get_level2
 from src.gameClass.scenarios.level3 import get_level3
+import concurrent.futures
 
 # Configuración visual
 TILE_SIZE = 40
@@ -87,7 +88,7 @@ def main():
 
     # Agentes
     #agentA = ParallelExpectimaxAgent(depth=3,time_limit=None, debug=True)
-    agentA = ParallelAlphaBetaAgent(depth=3, tankIndex=0, time_limit=7)
+    agentA = ExpectimaxAgent(depth=3, time_limit=10,debug=True)
     enemies = [ScriptedEnemyAgent(i+1, script_type='attack_base') for i in range(len(game_state.getTeamBTanks()))]
 
     # Ventana
@@ -141,8 +142,45 @@ def main():
             running = False
             continue
 
-        # Turno jugador
-        actionA = agentA.getAction(game_state)
+        # Turno jugador: ejecutar getAction en un thread para no bloquear la GUI
+        def get_action_with_timeout(agent, state, timeout=None, poll_interval=0.02):
+            """Ejecuta agent.getAction(state) en un thread y evita bloquear el hilo principal.
+
+            - timeout: segundos máximos a esperar (None -> usar agent.time_limit o 1.0)
+            - poll_interval: intervalo para procesar eventos y permitir redraws
+            Retorna la acción (o 'STOP' si hubo timeout/excepción).
+            """
+            use_timeout = timeout if timeout is not None else getattr(agent, 'time_limit', 1.0)
+            if use_timeout is None:
+                use_timeout = 1.0
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(agent.getAction, state)
+                start = time.time()
+                try:
+                    # Poll until done or timeout, pumping pygame events to keep UI responsive
+                    while True:
+                        if fut.done():
+                            return fut.result()
+                        elapsed = time.time() - start
+                        if elapsed >= use_timeout:
+                            try:
+                                fut.cancel()
+                            except Exception:
+                                pass
+                            return 'STOP'
+                        # Pump events so window stays responsive
+                        try:
+                            pygame.event.pump()
+                        except Exception:
+                            pass
+                        time.sleep(poll_interval)
+                except Exception:
+                    return 'STOP'
+
+        # Decide timeout: prefer agent.time_limit if disponible
+        timeout_val = getattr(agentA, 'time_limit', None)
+        actionA = get_action_with_timeout(agentA, game_state, timeout=timeout_val)
         # Depuración: mostrar acción y posición antes/después
         tankA = game_state.getTeamATank()
         pos_before = tankA.getPos() if tankA else None
@@ -178,6 +216,7 @@ def main():
 
         # Dibujar estado (pasar la acción elegida por el agente 0)
         draw_game(screen, game_state, action=actionA)
+        pygame.time.delay(200)
 
     pygame.quit()
     sys.exit()

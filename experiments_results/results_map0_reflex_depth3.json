@@ -1,0 +1,117 @@
+{
+  "summary": {
+    "wins": 4,
+    "losses": 6,
+    "draws": 0,
+    "num_games": 10
+  },
+  "per_game": [
+    {
+      "game_index": 0,
+      "result": "win",
+      "script_type": "offensive",
+      "duration": 0.9303693771362305,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 1,
+      "result": "loss",
+      "script_type": "defensive",
+      "duration": 0.05739879608154297,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 2,
+      "result": "win",
+      "script_type": "offensive",
+      "duration": 0.03381156921386719,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 3,
+      "result": "loss",
+      "script_type": "defensive",
+      "duration": 0.06136631965637207,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 4,
+      "result": "win",
+      "script_type": "offensive",
+      "duration": 0.0357973575592041,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 5,
+      "result": "loss",
+      "script_type": "defensive",
+      "duration": 0.04966378211975098,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 6,
+      "result": "loss",
+      "script_type": "offensive",
+      "duration": 0.0446171760559082,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 7,
+      "result": "loss",
+      "script_type": "defensive",
+      "duration": 0.05766463279724121,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 8,
+      "result": "win",
+      "script_type": "offensive",
+      "duration": 0.04077601432800293,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    },
+    {
+      "game_index": 9,
+      "result": "loss",
+      "script_type": "defensive",
+      "duration": 0.06347918510437012,
+      "decision_count": 0,
+      "total_nodes": 0,
+      "avg_nodes_per_search": 0.0,
+      "nodes_per_decision": []
+    }
+  ],
+  "aggregate": {
+    "mean_duration_per_simulation": 0.13749442100524903,
+    "mean_avg_nodes_per_search": 0.0,
+    "overall_total_nodes": 0,
+    "overall_total_decisions": 0,
+    "overall_avg_nodes_per_search": 0.0
+  }
+}
