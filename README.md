@@ -1,4 +1,5 @@
 # BattleCity-Multi-Agent
+![BattleCity MultiAgent Banner](https://raw.githubusercontent.com/MateoOrtiz001/BattleCity-Multi-Agent/main/assets/banner.webp)
 Un agente basado en búsqueda adversaria para jugar el clásico juego Battle City.
 
 
